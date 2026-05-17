@@ -1,0 +1,26 @@
+# 依赖目录
+node_modules/
+
+# 构建产物
+dist/
+*.local
+
+# 编辑器/IDE 配置
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 敏感配置（不要提交，改为 .env.example 提供示例）
+.env
+.env.*.local
+
+# 日志
+logs/
+*.log
+npm-debug.log*
+
+# 缓存
+.cache/
+.parcel-cache/
