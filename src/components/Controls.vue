@@ -2,13 +2,14 @@
   <div class="controls flex gap-2.5 mt-3">
     <button
       @click="$emit('restart')"
-      class="control-card group flex-1 flex flex-col items-center gap-1.5 py-2.5 px-2 rounded-2xl
+      class="control-card group flex-1 flex flex-col items-center gap-1 py-3 px-2 rounded-2xl
              bg-white/10 backdrop-blur-md border border-white/15
              shadow-md shadow-black/10
              transition-all duration-200 ease-out
              hover:bg-white/20 hover:shadow-xl hover:shadow-purple-500/20 hover:-translate-y-1
              active:translate-y-0.5 active:scale-[0.97] active:shadow-sm
              focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent focus-visible:outline-none"
+      style="min-height: 52px; min-width: 52px;"
     >
       <svg class="w-6 h-6 text-white/90 group-hover:scale-110 group-hover:text-white transition-all duration-200 group-active:scale-95" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="23 4 23 10 17 10" />
@@ -20,13 +21,14 @@
 
     <button
       @click="$emit('shuffle')"
-      class="control-card group flex-1 flex flex-col items-center gap-1.5 py-2.5 px-2 rounded-2xl
+      class="control-card group flex-1 flex flex-col items-center gap-1 py-3 px-2 rounded-2xl
              bg-white/10 backdrop-blur-md border border-white/15
              shadow-md shadow-black/10
              transition-all duration-200 ease-out
              hover:bg-white/20 hover:shadow-xl hover:shadow-cyan-500/20 hover:-translate-y-1
              active:translate-y-0.5 active:scale-[0.97] active:shadow-sm
              focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent focus-visible:outline-none"
+      style="min-height: 52px; min-width: 52px;"
     >
       <svg class="w-6 h-6 text-white/90 group-hover:scale-110 group-hover:text-white transition-all duration-200 group-active:scale-95" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="16 3 21 3 21 8" />
@@ -40,13 +42,14 @@
 
     <button
       @click="$emit('hint')"
-      class="control-card group flex-1 flex flex-col items-center gap-1.5 py-2.5 px-2 rounded-2xl
+      class="control-card group flex-1 flex flex-col items-center gap-1 py-3 px-2 rounded-2xl
              bg-white/10 backdrop-blur-md border border-white/15
              shadow-md shadow-black/10
              transition-all duration-200 ease-out
              hover:bg-white/20 hover:shadow-xl hover:shadow-amber-500/20 hover:-translate-y-1
              active:translate-y-0.5 active:scale-[0.97] active:shadow-sm
              focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent focus-visible:outline-none"
+      style="min-height: 52px; min-width: 52px;"
     >
       <svg class="w-6 h-6 text-white/90 group-hover:scale-110 group-hover:text-white transition-all duration-200 group-active:scale-95" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M9 18h6" />

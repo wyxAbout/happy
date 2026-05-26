@@ -1,6 +1,10 @@
 import { ref, computed, watch } from 'vue'
-import { GRID_SIZE, TILE_TYPES, MIN_MATCH, BASE_SCORE, COMBO_MULTIPLIER, STORAGE_KEYS, LEVEL_CONFIG, DEFAULT_EMOJIS, FALLBACK_EMOJIS, ICONS_DIR, TOTAL_LEVELS } from '../constants'
+import { GRID_SIZE, TILE_TYPES, MIN_MATCH, BASE_SCORE, COMBO_MULTIPLIER, STORAGE_KEYS, LEVEL_CONFIG, DDC_CONFIG, DEFAULT_EMOJIS, ICONS_DIR, TOTAL_LEVELS } from '../constants'
 import { useImageCache } from './useImageCache'
+
+const debugLog = (...args) => {
+  if (import.meta.env.DEV) console.log(...args)
+}
 
 export function useGameState() {
   const grid = ref([])
@@ -24,12 +28,19 @@ export function useGameState() {
   const loadError = ref(null)
   const loadProgress = ref(0)
 
+  const consecutiveWins = ref(0)
+  const consecutiveLosses = ref(0)
+  const ddcMovesModifier = ref(0)
+  const ddcSpecialBoostModifier = ref(0)
+  const activeTileTypes = ref(TILE_TYPES)
+
   const { loadImage, preloadImages, clearCache, cacheStats } = useImageCache()
 
   const useCustomIcons = computed(() => customIcons.value.length >= TILE_TYPES)
 
   const getIcons = () => {
-    return useCustomIcons.value ? customIcons.value.slice(0, TILE_TYPES) : DEFAULT_EMOJIS
+    const count = activeTileTypes.value
+    return useCustomIcons.value ? customIcons.value.slice(0, count) : DEFAULT_EMOJIS.slice(0, count)
   }
 
   const loadHighScore = () => {
@@ -63,6 +74,59 @@ export function useGameState() {
     } catch (e) {
       console.error('Failed to load completed levels:', e)
       completedLevels.value = []
+    }
+  }
+
+  const loadDDCStreak = () => {
+    try {
+      const saved = localStorage.getItem(DDC_CONFIG.streakStorageKey)
+      if (saved) {
+        const data = JSON.parse(saved)
+        consecutiveWins.value = data.wins || 0
+        consecutiveLosses.value = data.losses || 0
+      }
+    } catch (e) {
+      consecutiveWins.value = 0
+      consecutiveLosses.value = 0
+    }
+  }
+
+  const saveDDCStreak = () => {
+    try {
+      localStorage.setItem(DDC_CONFIG.streakStorageKey, JSON.stringify({
+        wins: consecutiveWins.value,
+        losses: consecutiveLosses.value
+      }))
+    } catch (e) {
+      debugLog('Failed to save DDC streak:', e)
+    }
+  }
+
+  const recordLevelWin = () => {
+    consecutiveWins.value++
+    consecutiveLosses.value = 0
+    saveDDCStreak()
+  }
+
+  const recordLevelLoss = () => {
+    consecutiveLosses.value++
+    consecutiveWins.value = 0
+    saveDDCStreak()
+  }
+
+  const applyDDCModifiers = () => {
+    ddcMovesModifier.value = 0
+    ddcSpecialBoostModifier.value = 0
+
+    if (consecutiveLosses.value >= DDC_CONFIG.hardThreshold) {
+      ddcMovesModifier.value = DDC_CONFIG.easyExtraMoves
+      ddcSpecialBoostModifier.value = DDC_CONFIG.easySpecialBoost
+    } else if (consecutiveLosses.value >= DDC_CONFIG.easyThreshold) {
+      ddcMovesModifier.value = DDC_CONFIG.easyBonusMoves
+      ddcSpecialBoostModifier.value = DDC_CONFIG.easySpecialBoost
+    } else if (consecutiveWins.value >= DDC_CONFIG.hardThreshold) {
+      ddcMovesModifier.value = -DDC_CONFIG.hardPenaltyMoves
+      ddcSpecialBoostModifier.value = DDC_CONFIG.hardSpecialBoost
     }
   }
 
@@ -138,7 +202,7 @@ export function useGameState() {
   const getRandomIcon = () => {
     const icons = getIcons()
     if (icons.length === 0) {
-      return FALLBACK_EMOJIS[Math.floor(Math.random() * FALLBACK_EMOJIS.length)]
+      return DEFAULT_EMOJIS[Math.floor(Math.random() * DEFAULT_EMOJIS.length)]
     }
     return icons[Math.floor(Math.random() * icons.length)]
   }
@@ -146,10 +210,12 @@ export function useGameState() {
   const createTile = () => {
     const icon = getRandomIcon()
     return {
-      icon: icon || FALLBACK_EMOJIS[0],
+      icon: icon || DEFAULT_EMOJIS[0],
       selected: false,
       matched: false,
       falling: false,
+      fallDistance: 0,
+      fallPhase: null,
       popping: false,
       special: null,
       specialActivated: false
@@ -162,12 +228,15 @@ export function useGameState() {
       grid.value.push(createTile())
     }
 
-    while (findMatches().matches.length > 0) {
+    let matchResult = findMatches()
+    while (matchResult.matches.length > 0) {
+      const matchedSet = new Set(matchResult.matches)
       for (let i = 0; i < grid.value.length; i++) {
-        if (isPartOfMatch(i)) {
+        if (matchedSet.has(i)) {
           grid.value[i].icon = getRandomIcon()
         }
       }
+      matchResult = findMatches()
     }
   }
 
@@ -286,10 +355,14 @@ export function useGameState() {
     return false
   }
 
+  const SWAP_PROPS = ['icon', 'special', 'specialActivated', 'matched', 'popping', 'selected', 'falling', 'fallDistance', 'fallPhase']
+
   const swapTiles = (index1, index2) => {
-    const temp = grid.value[index1].icon
-    grid.value[index1].icon = grid.value[index2].icon
-    grid.value[index2].icon = temp
+    for (const prop of SWAP_PROPS) {
+      const temp = grid.value[index1][prop]
+      grid.value[index1][prop] = grid.value[index2][prop]
+      grid.value[index2][prop] = temp
+    }
   }
 
   const shuffleGrid = () => {
@@ -301,19 +374,40 @@ export function useGameState() {
     icons.forEach((icon, i) => {
       grid.value[i].icon = icon
       grid.value[i].falling = true
+      grid.value[i].fallDistance = 0
+      grid.value[i].fallPhase = null
+      grid.value[i].matched = false
+      grid.value[i].popping = false
+      grid.value[i].selected = false
+      grid.value[i].special = null
+      grid.value[i].specialActivated = false
     })
   }
 
   const setLevelConfig = (levelNum) => {
     const config = LEVEL_CONFIG[levelNum] || {
-      startScore: (levelNum - 1) * 1000,
-      target: levelNum * 1000,
-      moves: Math.max(12, 30 - (levelNum - 1) * 1)
+      startScore: 0,
+      target: 1000,
+      moves: 30,
+      tileTypes: TILE_TYPES,
+      specialBoost: 0.05
     }
+
+    applyDDCModifiers()
+
     const safeStartScore = Math.max(0, Number.isFinite(config.startScore) ? config.startScore : 0)
     score.value = safeStartScore
-    target.value = Math.max(0, Number.isFinite(config.target) ? config.target : levelNum * 1000)
-    moves.value = Math.max(1, Number.isFinite(config.moves) ? config.moves : 30)
+    target.value = Math.max(100, Number.isFinite(config.target) ? config.target : 1000)
+    const baseMoves = Math.max(5, Number.isFinite(config.moves) ? config.moves : 30)
+    moves.value = Math.max(5, baseMoves + ddcMovesModifier.value)
+
+    activeTileTypes.value = Math.min(TILE_TYPES, Math.max(3, config.tileTypes || TILE_TYPES))
+
+    if (ddcMovesModifier.value > 0) {
+      message.value = `额外获得 ${ddcMovesModifier.value} 步！加油！`
+    } else if (ddcMovesModifier.value < 0) {
+      message.value = `高手模式！步数略微减少`
+    }
   }
 
   const resetGame = () => {
@@ -359,9 +453,11 @@ export function useGameState() {
   }
 
   const completeLevel = () => {
+    score.value = target.value
     unlockNextLevel()
     levelComplete.value = true
     saveHighScore()
+    recordLevelWin()
     message.value = `恭喜通关！第 ${level.value} 关完成！`
   }
 
@@ -372,24 +468,24 @@ export function useGameState() {
   }
 
     const loadCustomIcons = async () => {
-        console.log('Attempting to load custom icons from:', `${ICONS_DIR}/config.json`)
+        debugLog('Attempting to load custom icons from:', `${ICONS_DIR}/config.json`)
         loadProgress.value = 0
         try {
             const configResponse = await fetch(`${ICONS_DIR}/config.json`)
-            console.log('Config fetch status:', configResponse.status)
+            debugLog('Config fetch status:', configResponse.status)
             if (configResponse.ok) {
                 const config = await configResponse.json()
-                console.log('Config loaded:', config)
+                debugLog('Config loaded:', config)
                 if (config.icons && Array.isArray(config.icons)) {
                     const iconPaths = config.icons.map(name => `${ICONS_DIR}/${name}`)
-                    console.log('Icon paths to load:', iconPaths)
+                    debugLog('Icon paths to load:', iconPaths)
 
                     const loadResults = await Promise.all(iconPaths.map((iconPath, index) =>
                         new Promise((resolve) => {
                             loadImage(iconPath, 1).then((img) => {
                                 loadProgress.value = ((index + 1) / iconPaths.length) * 100
                                 cacheProgress.value = loadProgress.value
-                                console.log(`Successfully loaded icon (cached): ${iconPath}`)
+                                debugLog(`Successfully loaded icon (cached): ${iconPath}`)
                                 resolve({ path: iconPath, success: true })
                             }).catch((e) => {
                                 console.error(`Failed to load icon: ${iconPath}`, e)
@@ -403,21 +499,21 @@ export function useGameState() {
                     const successfulPaths = loadResults.filter(r => r.success).map(r => r.path)
                     if (successfulPaths.length >= TILE_TYPES) {
                         customIcons.value = successfulPaths
-                        console.log('Custom icons loaded successfully:', customIcons.value)
+                        debugLog('Custom icons loaded successfully:', customIcons.value)
                     } else {
-                        console.log(`Only loaded ${successfulPaths.length} of ${TILE_TYPES} required icons, using emojis`)
+                        debugLog(`Only loaded ${successfulPaths.length} of ${TILE_TYPES} required icons, using emojis`)
                     }
                 }
             } else {
-                console.log('No custom icons config found, using emojis')
+                debugLog('No custom icons config found, using emojis')
             }
         } catch (e) {
             console.error('Error loading custom icons:', e.message)
-            console.log('Using default emojis instead')
+            debugLog('Using default emojis instead')
         }
         loadProgress.value = 100
         imagesLoaded.value = true
-        console.log('Image cache stats:', cacheStats.value)
+        debugLog('Image cache stats:', cacheStats.value)
     }
 
   const preloadAllImages = async () => {
@@ -430,7 +526,7 @@ export function useGameState() {
     })
 
     await preloadImages(iconUrls, 1)
-    console.log('All images preloaded')
+    debugLog('All images preloaded')
   }
 
   const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms))
@@ -441,26 +537,23 @@ export function useGameState() {
     loadProgress.value = 0
     
     try {
-      console.log('Starting game initialization...')
+      debugLog('Starting game initialization...')
       
-      // 第一步：加载配置
       await loadCustomIcons()
       
-      // 第二步：预加载所有图片资源
-      console.log('Preloading images...')
+      debugLog('Preloading images...')
       loadProgress.value = 50
       await preloadAllImages()
       
-      // 第三步：加载游戏进度数据
       loadHighScore()
       loadCompletedLevels()
+      loadDDCStreak()
       
-      // 第四步：所有资源加载完成，初始化游戏网格
       loadProgress.value = 100
-      console.log('All resources loaded, initializing grid...')
+      debugLog('All resources loaded, initializing grid...')
       initGrid()
       
-      console.log('Game initialization complete!')
+      debugLog('Game initialization complete!')
       
     } catch (error) {
       console.error('Failed to initialize game:', error)
@@ -521,6 +614,15 @@ export function useGameState() {
     clearGameState,
     clearCache,
     delay,
+    consecutiveWins,
+    consecutiveLosses,
+    ddcMovesModifier,
+    ddcSpecialBoostModifier,
+    activeTileTypes,
+    loadDDCStreak,
+    recordLevelWin,
+    recordLevelLoss,
+    applyDDCModifiers,
     getRandomIcon,
     createTile,
     initializeGame,

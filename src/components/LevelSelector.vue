@@ -8,13 +8,13 @@
         </button>
       </div>
 
-      <div class="level-grid p-4 grid grid-cols-6 gap-2 max-h-[50vh] overflow-y-auto">
+      <div class="level-grid p-4 grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-[50vh] overflow-y-auto">
         <button
           v-for="lvl in totalLevels"
           :key="lvl"
           @click="selectLevel(lvl)"
           :disabled="!isLevelUnlocked(lvl)"
-          class="level-btn w-full aspect-square rounded-xl font-bold text-sm transition-all duration-200 ease-out flex items-center justify-center
+          class="level-btn w-full aspect-square min-w-[44px] min-h-[44px] rounded-xl font-bold text-sm transition-all duration-200 ease-out flex items-center justify-center
                  hover:scale-105 active:scale-95"
           :class="getLevelClass(lvl)"
         >

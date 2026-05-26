@@ -1,5 +1,9 @@
 import { ref, shallowRef } from 'vue'
 
+const debugLog = (...args) => {
+  if (import.meta.env.DEV) console.log(...args)
+}
+
 const cache = {}
 const pending = new Map()
 const LRUOrder = []
@@ -82,24 +86,13 @@ export function useImageCache() {
       if (cachedData) {
         const data = JSON.parse(cachedData)
         if (data.timestamp && Date.now() - data.timestamp < 7 * 24 * 60 * 60 * 1000) {
-          console.log('Loading cached image metadata...')
+          debugLog('Loading cached image metadata...')
         }
       }
     } catch (e) {
       console.warn('Failed to load cache metadata:', e)
     }
     isReady.value = true
-  }
-
-  const saveCacheMetadata = () => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        timestamp: Date.now(),
-        stats: cacheStats.value
-      }))
-    } catch (e) {
-      console.warn('Failed to save cache metadata:', e)
-    }
   }
 
   return {

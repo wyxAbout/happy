@@ -2,6 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -9,15 +16,69 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+}
+
 body {
   font-family: 'PingFang SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   overflow-x: hidden;
   touch-action: manipulation;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
+}
+
+@media (min-width: 768px) {
+  body {
+    overflow-x: visible;
+  }
 }
 
 #app {
   width: 100%;
   min-height: 100vh;
+  min-height: -webkit-fill-available;
+  padding-top: var(--safe-area-top);
+  padding-bottom: var(--safe-area-bottom);
+  padding-left: var(--safe-area-left);
+  padding-right: var(--safe-area-right);
+}
+
+@supports (-webkit-touch-callout: none) {
+  body {
+    min-height: -webkit-fill-available;
+  }
+
+  #app {
+    min-height: -webkit-fill-available;
+  }
+}
+
+@media (max-width: 374px) {
+  body {
+    font-size: 14px;
+  }
+}
+
+@media (min-width: 375px) and (max-width: 413px) {
+  body {
+    font-size: 15px;
+  }
+}
+
+@media (min-width: 414px) {
+  body {
+    font-size: 16px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  body {
+    overflow-y: auto;
+  }
 }
 
 @keyframes popIn {

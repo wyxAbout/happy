@@ -7,7 +7,7 @@
       'falling': tile.falling,
       'popping': tile.popping,
       'custom-icon': isCustomIcon,
-      'dragging': isDragging,
+      'dragging': hasDragOffset,
       'special-horizontal': tile.special === 'horizontal' && !tile.specialActivated,
       'special-vertical': tile.special === 'vertical' && !tile.specialActivated,
       'special-bomb': tile.special === 'bomb' && !tile.specialActivated,
@@ -58,6 +58,10 @@ const props = defineProps({
   index: Number,
   cellSize: Number,
   isSelected: Boolean,
+  isDragging: {
+    type: Boolean,
+    default: false
+  },
   dragOffset: {
     type: Object,
     default: () => ({ x: 0, y: 0 })
@@ -70,8 +74,7 @@ const isCustomIcon = computed(() => {
   return props.tile.icon && props.tile.icon.startsWith('/')
 })
 
-// 是否正在拖动（偏移量非零）
-const isDragging = computed(() => {
+const hasDragOffset = computed(() => {
   return props.dragOffset.x !== 0 || props.dragOffset.y !== 0
 })
 
@@ -79,25 +82,41 @@ const tileStyle = computed(() => {
   const size = props.cellSize
   const { x, y } = props.dragOffset
 
-  // 基础样式
   const style = {
     width: `${size}px`,
     height: `${size}px`,
     fontSize: `${size * 0.6}px`
   }
 
-  // 如果有拖动偏移，添加 transform
   if (x !== 0 || y !== 0) {
     style.transform = `translate(${x}px, ${y}px)`
     style.transition = 'transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1)'
     style.zIndex = 10
     style.boxShadow = '0 8px 25px rgba(0,0,0,0.3)'
     style.borderRadius = '16px'
-  } else {
-    // 回弹动画
-    style.transition = 'transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)'
+    return style
   }
 
+  if (props.tile.falling && (props.tile.fallDistance || 0) > 0) {
+    const gap = 6
+    const offsetY = -(props.tile.fallDistance) * (size + gap)
+
+    if (props.tile.fallPhase === 'start') {
+      style.transform = `translateY(${offsetY}px)`
+      style.transition = 'none'
+      style.zIndex = 5
+    } else if (props.tile.fallPhase === 'end') {
+      style.transform = 'translateY(0)'
+      style.transition = `transform ${0.15 + props.tile.fallDistance * 0.05}s cubic-bezier(0.25, 0.46, 0.45, 0.94)`
+      style.zIndex = 5
+    } else {
+      style.transform = `translateY(${offsetY}px)`
+      style.transition = 'none'
+    }
+    return style
+  }
+
+  style.transition = 'transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)'
   return style
 })
 
@@ -135,6 +154,24 @@ const handleTouchStart = (e) => {
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15), 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
+@media (hover: hover) and (pointer: fine) {
+  .game-tile:hover:not(.dragging) {
+    transform: scale(1.08) translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15), 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .game-tile:active:not(.dragging) {
+    transform: scale(0.98);
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .game-tile:hover:not(.dragging) {
+    transform: none;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
+  }
+}
+
 .game-tile:active:not(.dragging) {
   transform: scale(0.98);
 }
@@ -150,7 +187,7 @@ const handleTouchStart = (e) => {
 }
 
 .game-tile.falling {
-  animation: popIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  opacity: 1;
 }
 
 .game-tile.dragging {

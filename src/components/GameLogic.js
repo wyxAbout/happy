@@ -1,6 +1,6 @@
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { useGameState } from '../composables/useGameState'
-import { GRID_SIZE, BASE_SCORE, COMBO_MULTIPLIER, TOTAL_LEVELS } from '../constants'
+import { GRID_SIZE, BASE_SCORE, COMBO_MULTIPLIER, SPECIAL_CLEAR_SCORE_MULTIPLIER, DROP_BASE_DELAY, DROP_SPEED_PER_CELL, LEVEL_CONFIG } from '../constants'
 
 export function useGameLogic() {
   const {
@@ -40,7 +40,14 @@ export function useGameLogic() {
     hasValidMoves,
     getRow,
     getCol,
-    initializeGame
+    initializeGame,
+    recordLevelWin,
+    recordLevelLoss,
+    consecutiveWins,
+    consecutiveLosses,
+    ddcSpecialBoostModifier,
+    ddcMovesModifier,
+    activeTileTypes
   } = useGameState()
 
   const messageType = ref('info')
@@ -95,6 +102,27 @@ export function useGameLogic() {
 
       await delay(100)
 
+      if (combo.value >= 2) {
+        const lvlConfig = LEVEL_CONFIG[level.value] || LEVEL_CONFIG[1]
+        const boostChance = (lvlConfig.specialBoost || 0.05) + ddcSpecialBoostModifier.value
+        if (Math.random() < boostChance) {
+          const emptyCells = []
+          for (let i = 0; i < grid.value.length; i++) {
+            if (!grid.value[i].icon || grid.value[i].icon === '') {
+              emptyCells.push(i)
+            }
+          }
+          if (emptyCells.length > 0) {
+            const targetIdx = emptyCells[Math.floor(Math.random() * emptyCells.length)]
+            const specialTypes = ['horizontal', 'vertical', 'bomb']
+            grid.value[targetIdx].special = specialTypes[Math.floor(Math.random() * specialTypes.length)]
+            grid.value[targetIdx].icon = createTile().icon
+            message.value = `${combo.value}连击！触发额外特殊砖块！`
+            messageType.value = 'success'
+          }
+        }
+      }
+
       await dropIcons()
       await fillEmptyCells()
 
@@ -121,61 +149,138 @@ export function useGameLogic() {
   }
 
   const dropIcons = async () => {
-    let dropped = false
+    let maxFallDistance = 0
 
     for (let col = 0; col < GRID_SIZE; col++) {
-      let emptyRow = GRID_SIZE - 1
+      let writeRow = GRID_SIZE - 1
 
-      for (let row = GRID_SIZE - 1; row >= 0; row--) {
-        const index = row * GRID_SIZE + col
+      for (let readRow = GRID_SIZE - 1; readRow >= 0; readRow--) {
+        const index = readRow * GRID_SIZE + col
         const icon = grid.value[index].icon
 
         if (icon && icon !== '') {
-          if (row !== emptyRow) {
-            const targetIndex = emptyRow * GRID_SIZE + col
+          if (readRow !== writeRow) {
+            const targetIndex = writeRow * GRID_SIZE + col
+            const fallDistance = readRow - writeRow
+
             grid.value[targetIndex].icon = icon
             grid.value[targetIndex].special = grid.value[index].special
             grid.value[targetIndex].specialActivated = grid.value[index].specialActivated
+            grid.value[targetIndex].matched = grid.value[index].matched
+            grid.value[targetIndex].popping = grid.value[index].popping
+            grid.value[targetIndex].selected = grid.value[index].selected
+            grid.value[targetIndex].falling = true
+            grid.value[targetIndex].fallDistance = fallDistance
+
             grid.value[index].icon = ''
             grid.value[index].special = null
             grid.value[index].specialActivated = false
-            grid.value[targetIndex].falling = true
-            dropped = true
+            grid.value[index].matched = false
+            grid.value[index].popping = false
+            grid.value[index].selected = false
+            grid.value[index].falling = false
+            grid.value[index].fallDistance = 0
+
+            if (fallDistance > maxFallDistance) {
+              maxFallDistance = fallDistance
+            }
           }
-          emptyRow--
+          writeRow--
         }
       }
     }
 
-    if (dropped) {
-      await delay(250)
-      grid.value.forEach(cell => {
-        cell.falling = false
-      })
+    if (maxFallDistance > 0) {
+      await nextTick()
+
+      for (let i = 0; i < grid.value.length; i++) {
+        if (grid.value[i].falling) {
+          grid.value[i].fallPhase = 'start'
+        }
+      }
+
+      await delay(30)
+
+      for (let i = 0; i < grid.value.length; i++) {
+        if (grid.value[i].falling) {
+          grid.value[i].fallPhase = 'end'
+        }
+      }
+
+      await delay(DROP_BASE_DELAY + maxFallDistance * DROP_SPEED_PER_CELL)
+
+      for (let i = 0; i < grid.value.length; i++) {
+        if (grid.value[i].falling) {
+          grid.value[i].falling = false
+          grid.value[i].fallDistance = 0
+          grid.value[i].fallPhase = null
+        }
+      }
     }
   }
 
   const fillEmptyCells = async () => {
-    let filled = false
+    let maxFallDistance = 0
 
-    for (let i = 0; i < grid.value.length; i++) {
-      if (!grid.value[i].icon || grid.value[i].icon === '') {
-        const newTile = createTile()
-        grid.value[i].icon = newTile.icon
-        grid.value[i].special = null
-        grid.value[i].specialActivated = false
-        grid.value[i].matched = false
-        grid.value[i].popping = false
-        grid.value[i].falling = true
-        filled = true
+    for (let col = 0; col < GRID_SIZE; col++) {
+      let emptyCount = 0
+      for (let row = GRID_SIZE - 1; row >= 0; row--) {
+        const index = row * GRID_SIZE + col
+        if (!grid.value[index].icon || grid.value[index].icon === '') {
+          emptyCount++
+        }
+      }
+
+      if (emptyCount === 0) continue
+
+      let placedIndex = 0
+      for (let row = GRID_SIZE - 1; row >= 0; row--) {
+        const index = row * GRID_SIZE + col
+        if (!grid.value[index].icon || grid.value[index].icon === '') {
+          const newTile = createTile()
+          grid.value[index].icon = newTile.icon
+          grid.value[index].special = null
+          grid.value[index].specialActivated = false
+          grid.value[index].matched = false
+          grid.value[index].popping = false
+          grid.value[index].selected = false
+          grid.value[index].fallPhase = null
+          grid.value[index].falling = true
+          grid.value[index].fallDistance = emptyCount - placedIndex
+          placedIndex++
+          if (grid.value[index].fallDistance > maxFallDistance) {
+            maxFallDistance = grid.value[index].fallDistance
+          }
+        }
       }
     }
 
-    if (filled) {
-      await delay(250)
-      grid.value.forEach(cell => {
-        cell.falling = false
-      })
+    if (maxFallDistance > 0) {
+      await nextTick()
+
+      for (let i = 0; i < grid.value.length; i++) {
+        if (grid.value[i].falling) {
+          grid.value[i].fallPhase = 'start'
+        }
+      }
+
+      await delay(30)
+
+      for (let i = 0; i < grid.value.length; i++) {
+        if (grid.value[i].falling) {
+          grid.value[i].fallPhase = 'end'
+        }
+      }
+
+      await delay(DROP_BASE_DELAY + maxFallDistance * DROP_SPEED_PER_CELL)
+
+      for (let i = 0; i < grid.value.length; i++) {
+        if (grid.value[i].falling) {
+          grid.value[i].falling = false
+          grid.value[i].fallDistance = 0
+          grid.value[i].fallPhase = null
+        }
+      }
     }
   }
 
@@ -189,6 +294,8 @@ export function useGameLogic() {
 
   const checkGameStatus = () => {
     if (score.value >= target.value) {
+      score.value = target.value
+      recordLevelWin()
       unlockNextLevel()
       levelComplete.value = true
       showVictoryOverlay.value = true
@@ -201,11 +308,119 @@ export function useGameLogic() {
 
     if (moves.value <= 0) {
       gameOver.value = true
+      recordLevelLoss()
       message.value = '步数用完了，再试一次吧！'
       messageType.value = 'error'
       saveHighScore()
       clearGameState()
       return
+    }
+  }
+
+  const collectSpecialArea = (indices, index, direction) => {
+    const row = Math.floor(index / GRID_SIZE)
+    const col = index % GRID_SIZE
+
+    if (direction === 'horizontal') {
+      for (let c = 0; c < GRID_SIZE; c++) {
+        indices.add(row * GRID_SIZE + c)
+      }
+    } else if (direction === 'vertical') {
+      for (let r = 0; r < GRID_SIZE; r++) {
+        indices.add(r * GRID_SIZE + col)
+      }
+    } else if (direction === 'bomb') {
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          const r = row + dr
+          const c = col + dc
+          if (r >= 0 && r < GRID_SIZE && c >= 0 && c < GRID_SIZE) {
+            indices.add(r * GRID_SIZE + c)
+          }
+        }
+      }
+    }
+  }
+
+  const processDoubleSpecialClear = async (fromIndex, toIndex, fromDir, toDir) => {
+    const toClear = new Set()
+    collectSpecialArea(toClear, toIndex, fromDir)
+    collectSpecialArea(toClear, fromIndex, toDir)
+
+    const nonEmpty = [...toClear].filter(idx => {
+      const tile = grid.value[idx]
+      return tile && tile.icon && tile.icon !== ''
+    })
+
+    nonEmpty.forEach(idx => {
+      grid.value[idx].matched = true
+      grid.value[idx].popping = true
+    })
+
+    score.value += Math.floor(nonEmpty.length * BASE_SCORE * SPECIAL_CLEAR_SCORE_MULTIPLIER * 1.5)
+    message.value = `双重特殊消除！清除 ${nonEmpty.length} 个！`
+    messageType.value = 'success'
+
+    await delay(400)
+
+    nonEmpty.forEach(idx => {
+      grid.value[idx].icon = ''
+      grid.value[idx].matched = false
+      grid.value[idx].popping = false
+      grid.value[idx].special = null
+      grid.value[idx].specialActivated = false
+    })
+
+    await delay(100)
+    await dropIcons()
+    await fillEmptyCells()
+  }
+
+  const processSwap = async (fromIndex, toIndex, fromSpecial, toSpecial) => {
+    swapTiles(fromIndex, toIndex)
+
+    if (fromSpecial && toSpecial) {
+      grid.value[toIndex].specialActivated = true
+      grid.value[fromIndex].specialActivated = true
+
+      await delay(200)
+      await processDoubleSpecialClear(fromIndex, toIndex, fromSpecial, toSpecial)
+      moves.value--
+      selectedIndex.value = null
+      await processGame()
+    } else if (fromSpecial) {
+      grid.value[toIndex].special = fromSpecial
+      grid.value[toIndex].specialActivated = true
+      grid.value[fromIndex].special = null
+
+      await delay(200)
+      await processSpecialClear(toIndex, fromSpecial)
+      moves.value--
+      selectedIndex.value = null
+      await processGame()
+    } else if (toSpecial) {
+      grid.value[fromIndex].special = toSpecial
+      grid.value[fromIndex].specialActivated = true
+      grid.value[toIndex].special = null
+
+      await delay(200)
+      await processSpecialClear(fromIndex, toSpecial)
+      moves.value--
+      selectedIndex.value = null
+      await processGame()
+    } else {
+      const { matches } = findMatches()
+      if (matches.length > 0) {
+        moves.value--
+        selectedIndex.value = null
+        await processGame()
+      } else {
+        await delay(200)
+        swapTiles(fromIndex, toIndex)
+        message.value = '无法消除，请重新选择！'
+        messageType.value = 'warning'
+        selectedIndex.value = null
+      }
     }
   }
 
@@ -227,59 +442,10 @@ export function useGameLogic() {
 
       grid.value[selectedIndex.value].selected = false
 
-      const movingSpecial = grid.value[selectedIndex.value].special
-      const targetSpecial = grid.value[index].special
+      const fromSpecial = grid.value[selectedIndex.value].special
+      const toSpecial = grid.value[index].special
 
-      swapTiles(selectedIndex.value, index)
-
-      const hasMovingSpecial = movingSpecial && !targetSpecial
-      const hasTargetSpecial = targetSpecial && !movingSpecial
-      const hasBothSpecial = movingSpecial && targetSpecial
-
-      if (hasBothSpecial) {
-        grid.value[index].specialActivated = true
-        grid.value[selectedIndex.value].specialActivated = true
-
-        await delay(200)
-        await processSpecialClear(index, movingSpecial)
-        await processSpecialClear(selectedIndex.value, targetSpecial)
-        moves.value--
-        selectedIndex.value = null
-        await processGame()
-      } else if (hasMovingSpecial) {
-        grid.value[index].special = movingSpecial
-        grid.value[index].specialActivated = true
-        grid.value[selectedIndex.value].special = null
-
-        await delay(200)
-        await processSpecialClear(index, movingSpecial)
-        moves.value--
-        selectedIndex.value = null
-        await processGame()
-      } else if (hasTargetSpecial) {
-        grid.value[selectedIndex.value].special = targetSpecial
-        grid.value[selectedIndex.value].specialActivated = true
-        grid.value[index].special = null
-
-        await delay(200)
-        await processSpecialClear(selectedIndex.value, targetSpecial)
-        moves.value--
-        selectedIndex.value = null
-        await processGame()
-      } else {
-        const { matches } = findMatches()
-        if (matches.length > 0) {
-          moves.value--
-          selectedIndex.value = null
-          await processGame()
-        } else {
-          await delay(200)
-          swapTiles(selectedIndex.value, index)
-          message.value = '无法消除，请重新选择！'
-          messageType.value = 'warning'
-          selectedIndex.value = null
-        }
-      }
+      await processSwap(selectedIndex.value, index, fromSpecial, toSpecial)
 
       isAnimating.value = false
     } else {
@@ -292,44 +458,33 @@ export function useGameLogic() {
   }
 
   const processSpecialClear = async (index, direction) => {
-    const row = Math.floor(index / GRID_SIZE)
-    const col = index % GRID_SIZE
-    const toClear = []
+    const toClear = new Set()
+    collectSpecialArea(toClear, index, direction)
 
     if (direction === 'horizontal') {
-      for (let c = 0; c < GRID_SIZE; c++) {
-        toClear.push(row * GRID_SIZE + c)
-      }
       message.value = '横向消除！整行清除！'
     } else if (direction === 'vertical') {
-      for (let r = 0; r < GRID_SIZE; r++) {
-        toClear.push(r * GRID_SIZE + col)
-      }
       message.value = '纵向消除！整列清除！'
     } else if (direction === 'bomb') {
-      for (let dr = -1; dr <= 1; dr++) {
-        for (let dc = -1; dc <= 1; dc++) {
-          const r = row + dr
-          const c = col + dc
-          if (r >= 0 && r < GRID_SIZE && c >= 0 && c < GRID_SIZE) {
-            toClear.push(r * GRID_SIZE + c)
-          }
-        }
-      }
       message.value = '炸弹消除！3×3范围清除！'
     }
     messageType.value = 'success'
 
-    toClear.forEach(idx => {
+    const nonEmpty = [...toClear].filter(idx => {
+      const tile = grid.value[idx]
+      return tile && tile.icon && tile.icon !== ''
+    })
+
+    nonEmpty.forEach(idx => {
       grid.value[idx].matched = true
       grid.value[idx].popping = true
     })
 
-    score.value += toClear.length * BASE_SCORE * 2
+    score.value += Math.floor(nonEmpty.length * BASE_SCORE * SPECIAL_CLEAR_SCORE_MULTIPLIER)
 
     await delay(400)
 
-    toClear.forEach(idx => {
+    nonEmpty.forEach(idx => {
       grid.value[idx].icon = ''
       grid.value[idx].matched = false
       grid.value[idx].popping = false
@@ -356,9 +511,13 @@ export function useGameLogic() {
     shuffleGridUntilValid()
 
     await delay(300)
-    grid.value.forEach(cell => {
-      cell.falling = false
-    })
+    for (let i = 0; i < grid.value.length; i++) {
+      if (grid.value[i].falling) {
+        grid.value[i].falling = false
+        grid.value[i].fallDistance = 0
+        grid.value[i].fallPhase = null
+      }
+    }
 
     message.value = '继续游戏！'
     messageType.value = 'info'
@@ -411,74 +570,23 @@ export function useGameLogic() {
     await initializeGame()
   })
 
-    // GameLogic.js - useGameLogic 函数内部
+  const handleSwap = async ({ from, to }) => {
+    if (isAnimating.value || gameOver.value || levelComplete.value) return
+    if (!isAdjacent(from, to)) return
 
-    const handleSwap = async ({ from, to }) => {
-        if (isAnimating.value || gameOver.value || levelComplete.value) return
-        if (!isAdjacent(from, to)) return
-
-        if (selectedIndex.value !== null) {
-            grid.value[selectedIndex.value].selected = false
-        }
-
-        isAnimating.value = true
-
-        const fromSpecial = grid.value[from].special
-        const toSpecial = grid.value[to].special
-
-        swapTiles(from, to)
-
-        const hasFromSpecial = fromSpecial && !toSpecial
-        const hasToSpecial = toSpecial && !fromSpecial
-        const hasBothSpecial = fromSpecial && toSpecial
-
-        if (hasBothSpecial) {
-            grid.value[to].specialActivated = true
-            grid.value[from].specialActivated = true
-
-            await delay(200)
-            await processSpecialClear(to, fromSpecial)
-            await processSpecialClear(from, toSpecial)
-            moves.value--
-            selectedIndex.value = null
-            await processGame()
-        } else if (hasFromSpecial) {
-            grid.value[to].special = fromSpecial
-            grid.value[to].specialActivated = true
-            grid.value[from].special = null
-
-            await delay(200)
-            await processSpecialClear(to, fromSpecial)
-            moves.value--
-            selectedIndex.value = null
-            await processGame()
-        } else if (hasToSpecial) {
-            grid.value[from].special = toSpecial
-            grid.value[from].specialActivated = true
-            grid.value[to].special = null
-
-            await delay(200)
-            await processSpecialClear(from, toSpecial)
-            moves.value--
-            selectedIndex.value = null
-            await processGame()
-        } else {
-            const { matches } = findMatches()
-            if (matches.length > 0) {
-                moves.value--
-                selectedIndex.value = null
-                await processGame()
-            } else {
-                await delay(200)
-                swapTiles(to, from)
-                message.value = '无法消除，请重新选择！'
-                messageType.value = 'warning'
-                selectedIndex.value = null
-            }
-        }
-
-        isAnimating.value = false
+    if (selectedIndex.value !== null) {
+      grid.value[selectedIndex.value].selected = false
     }
+
+    isAnimating.value = true
+
+    const fromSpecial = grid.value[from].special
+    const toSpecial = grid.value[to].special
+
+    await processSwap(from, to, fromSpecial, toSpecial)
+
+    isAnimating.value = false
+  }
 
   return {
     grid,
@@ -510,6 +618,10 @@ export function useGameLogic() {
     isLevelCompleted,
     loadGameState,
     initializeGame,
-    saveHighScore
+    saveHighScore,
+    consecutiveWins,
+    consecutiveLosses,
+    ddcMovesModifier,
+    activeTileTypes
   }
 }

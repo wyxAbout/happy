@@ -2,7 +2,15 @@
 import { ref, computed } from 'vue'
 import { GRID_SIZE } from '../constants'
 
-export function useTileDrag(grid, selectedIndex, emit) {
+const debugLog = (...args) => {
+  if (import.meta.env.DEV) console.log(...args)
+}
+
+export function useTileDrag(grid, selectedIndex, emit, options = {}) {
+    const {
+        minDragDistance = 8
+    } = options
+
     // 拖动状态
     const dragState = ref({
         active: false,
@@ -42,6 +50,8 @@ export function useTileDrag(grid, selectedIndex, emit) {
     // 更新拖动位置
     const updateDrag = (direction, distance) => {
         if (!dragState.value.active || dragState.value.fromIndex === null) return
+        
+        if (distance < minDragDistance) return
 
         const fromIdx = dragState.value.fromIndex
         const row = Math.floor(fromIdx / GRID_SIZE)
@@ -80,7 +90,7 @@ export function useTileDrag(grid, selectedIndex, emit) {
         dragState.value.offsetY = offsetY
         dragState.value.direction = direction
 
-        console.log('🔄 updateDrag:', { fromIdx, toIdx, direction, distance })
+        debugLog('updateDrag:', { fromIdx, toIdx, direction, distance })
     }
 
     // 结束拖动（执行交换或回弹）
@@ -96,7 +106,7 @@ export function useTileDrag(grid, selectedIndex, emit) {
 
         // ✅ 只要 toIndex 和 fromIndex 有效，就触发交换（移除距离限制）
         if (fromIndex !== null && toIndex !== null) {
-            console.log('✅ 触发交换:', fromIndex, '↔', toIndex, '距离:', distance)
+            debugLog('swap:', fromIndex, '↔', toIndex, 'distance:', distance)
             emit('swap', { from: fromIndex, to: toIndex })
             emit('swipe', { direction, from: fromIndex, to: toIndex })
             return true

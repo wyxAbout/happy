@@ -1,5 +1,5 @@
 <template>
-  <div class="loading-screen fixed inset-0 bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 flex items-center justify-center z-50">
+  <div class="loading-screen fixed inset-0 bg-gradient-to-b from-[#4793cf] to-[#5db6e0] flex items-center justify-center z-50">
     <div class="loading-content text-center text-white max-w-sm mx-auto px-6">
       <div class="loading-icon text-6xl mb-6 animate-bounce">
         🎮

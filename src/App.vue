@@ -1,5 +1,5 @@
 <template>
-  <div class="app min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 flex items-center justify-center p-4">
+  <div class="app min-h-screen bg-gradient-to-b from-[#4793cf] to-[#5db6e0] flex items-center justify-center p-4 landscape-safe">
     <LoadingScreen
       v-if="isLoading || loadError"
       :progress="loadProgress"
@@ -7,7 +7,7 @@
       @retry="handleRetry"
     />
     
-    <div v-else class="game-container w-full max-w-md">      <div class="header-section relative flex items-center justify-center mb-3">
+    <div v-else class="game-container w-full max-w-md landscape-adjust">      <div class="header-section relative flex items-center justify-center mb-3">
         <button 
           @click="showLevelSelector = true"
           class="absolute left-0 level-select-btn flex items-center gap-1.5
@@ -41,14 +41,38 @@
         :target="target"
       />
 
-      <GameGrid
-        :grid="grid"
-        :cell-size="cellSize"
-        :selected-index="selectedIndex"
-        :disabled="isAnimating"
-        @tile-click="handleTileClick"
-        @swap="handleSwap"
+      <MessageBar
+        :message="message"
+        :combo="combo"
+        :type="messageType"
       />
+
+      <div class="game-grid-row relative flex items-center justify-center" style="overflow: visible;">
+        <div class="left-decor-wrapper hidden md:block absolute z-0" style="left: 0; top: 50%; transform: translate(calc(-100% - 2px), -50%); pointer-events: none;">
+          <img
+            src="/decorations/decoration-left.png"
+            alt="装饰"
+            class="left-decor-img object-contain w-56 lg:w-64 xl:w-80 h-auto"
+          />
+        </div>
+        <div class="relative z-10">
+          <GameGrid
+            :grid="grid"
+            :cell-size="cellSize"
+            :selected-index="selectedIndex"
+            :disabled="isAnimating"
+            @tile-click="handleTileClick"
+            @swap="handleSwap"
+          />
+        </div>
+        <div class="right-decor-wrapper hidden md:block absolute z-0" style="right: 0; top: 50%; transform: translate(calc(100% + 2px), -50%); pointer-events: none;">
+          <img
+            src="/decorations/decoration-left.png"
+            alt="装饰"
+            class="right-decor-img object-contain w-56 lg:w-64 xl:w-80 h-auto"
+          />
+        </div>
+      </div>
 
       <Controls
         @restart="handleRestart"
@@ -95,6 +119,7 @@ import ProgressBar from './components/ProgressBar.vue'
 import LevelSelector from './components/LevelSelector.vue'
 import LoadingScreen from './components/LoadingScreen.vue'
 import VictoryOverlay from './components/VictoryOverlay.vue'
+import MessageBar from './components/MessageBar.vue'
 import { useGameLogic } from './components/GameLogic'
 import { TOTAL_LEVELS, GRID_SIZE } from './constants'
 
@@ -137,6 +162,7 @@ const totalLevels = TOTAL_LEVELS
 
 const handleResetAllLevels = () => {
   localStorage.removeItem('happy-match-completed-levels')
+  localStorage.removeItem('happy-match-game-state')
   completedLevels.value = []
   handleRestart()
   showLevelSelector.value = false
@@ -148,26 +174,35 @@ const handleRetry = async () => {
 
 const calculateCellSize = () => {
   const screenWidth = window.innerWidth
-  const outerPadding = 32
-  const gridPadding = 24
+  const screenHeight = window.innerHeight
+  const isLandscape = screenWidth > screenHeight
+
+  const outerPadding = isLandscape ? 56 : 32
+  const gridPadding = 32
   const gap = 6
-  const maxContainerWidth = 448
+  const maxContainerWidth = isLandscape ? 420 : 448
 
   const containerWidth = Math.min(screenWidth - outerPadding, maxContainerWidth)
   const gridContentWidth = containerWidth - gridPadding
   const totalGapWidth = gap * (GRID_SIZE - 1)
   const availableForCells = gridContentWidth - totalGapWidth
-  const newSize = Math.max(35, Math.min(50, Math.floor(availableForCells / GRID_SIZE)))
+
+  let newSize = Math.floor(availableForCells / GRID_SIZE)
+  newSize = Math.max(32, Math.min(52, newSize))
   cellSize.value = newSize
 }
 
 onMounted(() => {
   calculateCellSize()
   window.addEventListener('resize', calculateCellSize)
+  window.addEventListener('orientationchange', () => {
+    setTimeout(calculateCellSize, 300)
+  })
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', calculateCellSize)
+  window.removeEventListener('orientationchange', calculateCellSize)
 })
 </script>
 
@@ -189,6 +224,39 @@ onUnmounted(() => {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@media (max-width: 374px) {
+  .app {
+    padding: 0.5rem;
+  }
+
+  .game-container {
+    transform: translateY(-2vh);
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .landscape-safe {
+    padding: 0.5rem;
+    align-items: flex-start;
+  }
+
+  .landscape-adjust {
+    transform: translateY(0);
+  }
+}
+
+@media (min-width: 768px) {
+  .game-container {
+    transform: translateY(-2vh);
+  }
+}
+
+@media (min-width: 1024px) {
+  .game-container {
+    transform: translateY(-1vh);
   }
 }
 </style>

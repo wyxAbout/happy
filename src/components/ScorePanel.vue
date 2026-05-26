@@ -28,8 +28,6 @@ const props = defineProps({
   moves: Number
 })
 
-defineEmits(['scoreAnimEnd'])
-
 let prevScore = 0
 const scoreAnimation = ref(false)
 
