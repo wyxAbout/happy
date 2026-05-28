@@ -1,5 +1,6 @@
 import { ref, onMounted, nextTick } from 'vue'
 import { useGameState } from '../composables/useGameState'
+import { useSound } from '../composables/useSound'
 import { GRID_SIZE, BASE_SCORE, COMBO_MULTIPLIER, SPECIAL_CLEAR_SCORE_MULTIPLIER, DROP_BASE_DELAY, DROP_SPEED_PER_CELL, LEVEL_CONFIG } from '../constants'
 
 export function useGameLogic() {
@@ -50,6 +51,19 @@ export function useGameLogic() {
     activeTileTypes
   } = useGameState()
 
+  const {
+    playMatch,
+    playCombo,
+    playSpecialClear,
+    playDoubleSpecialClear,
+    playVictory,
+    playGameStart,
+    playGameOver,
+    playInvalidMove,
+    playSwap,
+    ensureContext
+  } = useSound()
+
   const messageType = ref('info')
   const showVictoryOverlay = ref(false)
 
@@ -61,8 +75,10 @@ export function useGameLogic() {
       combo.value++
 
       if (combo.value > 1) {
+        playCombo(combo.value)
         message.value = `${combo.value}连击！消除 ${matches.length} 个！`
       } else {
+        playMatch(1)
         message.value = `消除 ${matches.length} 个图标！`
       }
       messageType.value = 'success'
@@ -301,6 +317,7 @@ export function useGameLogic() {
       showVictoryOverlay.value = true
       message.value = '太棒了！完成目标！'
       messageType.value = 'success'
+      playVictory()
       saveHighScore()
       clearGameState()
       return
@@ -311,6 +328,7 @@ export function useGameLogic() {
       recordLevelLoss()
       message.value = '步数用完了，再试一次吧！'
       messageType.value = 'error'
+      playGameOver()
       saveHighScore()
       clearGameState()
       return
@@ -360,6 +378,7 @@ export function useGameLogic() {
     score.value += Math.floor(nonEmpty.length * BASE_SCORE * SPECIAL_CLEAR_SCORE_MULTIPLIER * 1.5)
     message.value = `双重特殊消除！清除 ${nonEmpty.length} 个！`
     messageType.value = 'success'
+    playDoubleSpecialClear()
 
     await delay(400)
 
@@ -411,12 +430,14 @@ export function useGameLogic() {
     } else {
       const { matches } = findMatches()
       if (matches.length > 0) {
+        playSwap()
         moves.value--
         selectedIndex.value = null
         await processGame()
       } else {
         await delay(200)
         swapTiles(fromIndex, toIndex)
+        playInvalidMove()
         message.value = '无法消除，请重新选择！'
         messageType.value = 'warning'
         selectedIndex.value = null
@@ -426,6 +447,8 @@ export function useGameLogic() {
 
   const handleTileClick = async (index) => {
     if (isAnimating.value || gameOver.value || levelComplete.value) return
+
+    ensureContext()
 
     if (selectedIndex.value === null) {
       selectedIndex.value = index
@@ -469,6 +492,7 @@ export function useGameLogic() {
       message.value = '炸弹消除！3×3范围清除！'
     }
     messageType.value = 'success'
+    playSpecialClear()
 
     const nonEmpty = [...toClear].filter(idx => {
       const tile = grid.value[idx]
@@ -499,6 +523,7 @@ export function useGameLogic() {
   }
 
   const handleRestart = () => {
+    playGameStart()
     resetGame()
   }
 
