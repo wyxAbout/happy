@@ -16,6 +16,7 @@ export const ICONS_DIR = '/custom-icons'
 
 export const VICTORY_IMAGES_DIR = '/victory_images'
 export const VICTORY_IMAGES_COUNT = 24
+export const VICTORY_API_BASE = 'http://localhost:5022/api/card-types'
 export const VICTORY_CONFIG = {
   displayDuration: 2500,
   fadeInDuration: 400,

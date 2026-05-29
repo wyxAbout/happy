@@ -1,5 +1,6 @@
 <template>
-  <div v-if="visible" class="level-selector-overlay fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+  <Teleport to="body">
+    <div v-if="visible" class="level-selector-overlay fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
     <div class="level-selector bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-hidden">
       <div class="header bg-gradient-to-r from-purple-600 to-pink-500 text-white p-4 flex items-center justify-between">
         <h2 class="text-xl font-bold">选择关卡</h2>
@@ -68,7 +69,8 @@
         </button>
       </div>
     </div>
-  </div>
+    </div>
+  </Teleport>
 </template>
 
 <script setup>

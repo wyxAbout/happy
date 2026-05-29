@@ -1,34 +1,41 @@
 <template>
-  <Transition name="victory-fade">
-    <div
-      v-if="visible"
-      class="victory-overlay"
-      :style="overlayStyle"
-      @click="handleDismiss"
-    >
-      <div class="victory-image-wrapper">
-        <img
-          v-if="currentImage"
-          :src="currentImage"
-          alt="Victory"
-          class="victory-image"
-          :class="{ 'image-loaded': imageLoaded }"
-          @load="onImageLoad"
-        />
+  <Teleport to="body">
+    <Transition name="victory-fade">
+      <div
+        v-if="visible"
+        class="victory-overlay"
+        :style="overlayStyle"
+        @click="handleDismiss"
+      >
+        <div class="victory-image-wrapper">
+          <div v-if="isFetching && !currentImage" class="victory-loading text-white/80 text-lg">
+            加载中...
+          </div>
+          <img
+            v-if="currentImage"
+            :src="currentImage"
+            alt="Victory"
+            class="victory-image"
+            :class="{ 'image-loaded': imageLoaded }"
+            @load="onImageLoad"
+            @error="onImageError"
+          />
+        </div>
+        <div class="victory-hint" v-if="imageLoaded">
+          点击任意位置继续
+        </div>
       </div>
-      <div class="victory-hint" v-if="imageLoaded">
-        点击任意位置继续
-      </div>
-    </div>
-  </Transition>
+    </Transition>
+  </Teleport>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import {
   VICTORY_IMAGES_DIR,
   VICTORY_IMAGES_COUNT,
-  VICTORY_CONFIG
+  VICTORY_CONFIG,
+  VICTORY_API_BASE
 } from '../constants'
 
 const props = defineProps({
@@ -63,7 +70,7 @@ const emit = defineEmits(['dismiss'])
 const currentImage = ref('')
 const imageLoaded = ref(false)
 const isDismissing = ref(false)
-const preloadedImages = new Map()
+const isFetching = ref(false)
 const lastShownIndex = ref(-1)
 let dismissTimer = null
 
@@ -73,63 +80,47 @@ const overlayStyle = computed(() => ({
   '--overlay-opacity': props.overlayOpacity
 }))
 
-const getImagePath = (index) => {
+const getLocalImagePath = (index) => {
   const num = String(index).padStart(2, '0')
   return `${VICTORY_IMAGES_DIR}/victory_${num}.png`
 }
 
-const getAllImagePaths = () => {
-  const paths = []
-  for (let i = 1; i <= VICTORY_IMAGES_COUNT; i++) {
-    paths.push(getImagePath(i))
-  }
-  return paths
-}
-
-const pickRandomImage = () => {
-  if (VICTORY_IMAGES_COUNT <= 1) {
-    return getImagePath(1)
-  }
-
-  let randomIndex
+const pickRandomId = () => {
+  if (VICTORY_IMAGES_COUNT <= 1) return 1
+  let id
   do {
-    randomIndex = Math.floor(Math.random() * VICTORY_IMAGES_COUNT) + 1
-  } while (randomIndex === lastShownIndex.value && VICTORY_IMAGES_COUNT > 1)
-
-  lastShownIndex.value = randomIndex
-  return getImagePath(randomIndex)
+    id = Math.floor(Math.random() * VICTORY_IMAGES_COUNT) + 1
+  } while (id === lastShownIndex.value && VICTORY_IMAGES_COUNT > 1)
+  lastShownIndex.value = id
+  return id
 }
 
-const preloadImage = (src) => {
-  if (preloadedImages.has(src)) {
-    return Promise.resolve(preloadedImages.get(src))
-  }
-
-  return new Promise((resolve) => {
-    const img = new Image()
-    img.onload = () => {
-      preloadedImages.set(src, img)
-      resolve(img)
-    }
-    img.onerror = () => {
-      console.warn(`Failed to preload victory image: ${src}`)
-      resolve(null)
-    }
-    img.src = src
-  })
+const extractImageUrl = (data) => {
+  if (!data) return null
+  if (typeof data === 'string') return data
+  return data.imageUrl || data.image_url || data.image || data.url || data.path || data.src || null
 }
 
-const preloadAllImages = async () => {
-  const paths = getAllImagePaths()
-  const batchSize = 6
-  for (let i = 0; i < paths.length; i += batchSize) {
-    const batch = paths.slice(i, i + batchSize)
-    await Promise.allSettled(batch.map(preloadImage))
+const fetchImageFromApi = async (id) => {
+  const response = await fetch(`${VICTORY_API_BASE}/${id}`)
+  if (!response.ok) {
+    throw new Error(`API responded with status ${response.status}`)
   }
+  const data = await response.json()
+  const imageUrl = extractImageUrl(data)
+  if (!imageUrl) {
+    throw new Error('No image URL found in API response')
+  }
+  return imageUrl
 }
 
 const onImageLoad = () => {
   imageLoaded.value = true
+}
+
+const onImageError = () => {
+  imageLoaded.value = true
+  alert('胜利图片加载失败，请检查网络连接')
 }
 
 const clearTimer = () => {
@@ -155,10 +146,21 @@ const dismiss = () => {
   }, props.fadeOutDuration)
 }
 
-const showVictory = () => {
+const showVictory = async () => {
   isDismissing.value = false
   imageLoaded.value = false
-  currentImage.value = pickRandomImage()
+  isFetching.value = true
+
+  const id = pickRandomId()
+
+  try {
+    currentImage.value = await fetchImageFromApi(id)
+  } catch (err) {
+    console.warn(`API fetch failed for id ${id}:`, err.message)
+    currentImage.value = getLocalImagePath(id)
+  } finally {
+    isFetching.value = false
+  }
 
   clearTimer()
   dismissTimer = setTimeout(() => {
@@ -173,12 +175,7 @@ watch(() => props.visible, (newVal) => {
     clearTimer()
     isDismissing.value = false
     imageLoaded.value = false
-  }
-})
-
-onMounted(() => {
-  if (VICTORY_CONFIG.preloadAll) {
-    preloadAllImages()
+    isFetching.value = false
   }
 })
 

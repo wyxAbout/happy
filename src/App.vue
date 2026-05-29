@@ -248,6 +248,12 @@ onUnmounted(() => {
   }
 }
 
+@media (max-width: 767px) {
+  .game-container {
+    transform: translateY(0);
+  }
+}
+
 @media (min-width: 768px) {
   .game-container {
     transform: translateY(-2vh);
