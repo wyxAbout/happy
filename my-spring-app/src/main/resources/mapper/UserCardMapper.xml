@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.qingquan.mapper.UserCardMapper">
+
+    <resultMap id="userCardMap" type="com.qingquan.entity.UserCard">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="cardTypeId" column="card_type_id"/>
+        <result property="source" column="source"/>
+        <result property="obtainedTime" column="obtained_time"/>
+    </resultMap>
+
+    <select id="selectAll" resultMap="userCardMap">
+        SELECT * FROM user_cards
+        <where>
+            <if test="userId != null">user_id = #{userId}</if>
+        </where>
+        ORDER BY obtained_time DESC
+    </select>
+
+    <select id="selectById" resultMap="userCardMap">
+        SELECT * FROM user_cards WHERE id = #{id}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO user_cards (user_id, card_type_id, source)
+        VALUES (#{userId}, #{cardTypeId}, #{source})
+    </insert>
+
+    <update id="update">
+        UPDATE user_cards
+        <set>
+            <if test="userId != null">user_id = #{userId},</if>
+            <if test="cardTypeId != null">card_type_id = #{cardTypeId},</if>
+            <if test="source != null">source = #{source},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM user_cards WHERE id = #{id}
+    </delete>
+
+</mapper>
