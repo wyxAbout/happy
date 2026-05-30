@@ -7,7 +7,7 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/12happy?useUnicode=true&characterEncoding=utf8&allowMultiQueries=false&serverTimezone=GMT%2b8&allowPublicKeyRetrieval=true
     username: root
-    password: Gqq745408.
+    password:
 
 #配置mybatis实体和xml映射
 mybatis:

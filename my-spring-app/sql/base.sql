@@ -43,3 +43,10 @@ VALUES
     ('第22张卡片', '/victory_images/victory_22', 0),
     ('第23张卡片', '/victory_images/victory_23', 0),
     ('第24张卡片', '/victory_images/victory_24', 0);
+INSERT INTO `user_cards`
+(`user_id`, `card_type_id`, `source`)
+VALUES
+    (1, 1, 'game_drop'),
+    (1, 3, 'game_drop'),
+    (1, 2, 'game_drop'),
+    (2, 6, 'game_drop');

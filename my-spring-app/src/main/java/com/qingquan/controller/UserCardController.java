@@ -20,6 +20,11 @@ public class UserCardController {
         return Result.success(userCardService.list(userId));
     }
 
+    @GetMapping("/user/{userId}")
+    public Result<List<UserCard>> listByUserId(@PathVariable Long userId) {
+        return Result.success(userCardService.list(userId));
+    }
+
     @GetMapping("/{id}")
     public Result<UserCard> getById(@PathVariable Long id) {
         return Result.success(userCardService.getById(id));
