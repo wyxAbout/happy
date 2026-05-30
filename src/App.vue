@@ -28,6 +28,24 @@
         <div class="level-badge bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-bold px-5 py-2 rounded-2xl shadow-lg shadow-orange-500/25 text-base">
           第 {{ level }} 关
         </div>
+        <button
+          @click="showMyImages = true"
+          class="absolute right-0 my-images-btn flex items-center gap-1.5
+                 bg-white/10 backdrop-blur-md border border-white/15
+                 text-white font-semibold text-sm px-4 py-2 rounded-2xl
+                 shadow-md shadow-black/10
+                 transition-all duration-200 ease-out
+                 hover:bg-white/20 hover:shadow-lg hover:-translate-y-0.5
+                 active:translate-y-0 active:scale-[0.97]
+                 focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:outline-none"
+        >
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+            <circle cx="8.5" cy="8.5" r="1.5" />
+            <polyline points="21 15 16 10 5 21" />
+          </svg>
+          <span>图鉴</span>
+        </button>
       </div>
 
       <ScorePanel
@@ -105,6 +123,10 @@
         @select-level="handleGoToLevel"
         @reset-all="handleResetAllLevels"
       />
+      <MyImages
+        :visible="showMyImages"
+        @close="showMyImages = false"
+      />
     </div>
   </div>
 </template>
@@ -120,6 +142,7 @@ import LevelSelector from './components/LevelSelector.vue'
 import LoadingScreen from './components/LoadingScreen.vue'
 import VictoryOverlay from './components/VictoryOverlay.vue'
 import MessageBar from './components/MessageBar.vue'
+import MyImages from './components/MyImages.vue'
 import { useGameLogic } from './components/GameLogic'
 import { TOTAL_LEVELS, GRID_SIZE } from './constants'
 
@@ -158,6 +181,7 @@ const {
 
 const cellSize = ref(40)
 const showLevelSelector = ref(false)
+const showMyImages = ref(false)
 const totalLevels = TOTAL_LEVELS
 
 const handleResetAllLevels = () => {

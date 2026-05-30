@@ -37,6 +37,7 @@ import {
   VICTORY_CONFIG,
   VICTORY_API_BASE
 } from '../constants'
+import { saveUserCard, DEFAULT_USER_ID } from '../api/cardService'
 
 const props = defineProps({
   visible: {
@@ -68,6 +69,7 @@ const props = defineProps({
 const emit = defineEmits(['dismiss'])
 
 const currentImage = ref('')
+const currentCardTypeId = ref(0)
 const imageLoaded = ref(false)
 const isDismissing = ref(false)
 const isFetching = ref(false)
@@ -101,17 +103,38 @@ const extractImageUrl = (data) => {
   return data.imageUrl || data.image_url || data.image || data.url || data.path || data.src || null
 }
 
+const API_TIMEOUT_MS = 5000
+let abortController = null
+
 const fetchImageFromApi = async (id) => {
-  const response = await fetch(`${VICTORY_API_BASE}/${id}`)
-  if (!response.ok) {
-    throw new Error(`API responded with status ${response.status}`)
+  abortController = new AbortController()
+  const timeoutId = setTimeout(() => abortController.abort(), API_TIMEOUT_MS)
+
+  try {
+    const response = await fetch(`${VICTORY_API_BASE}/${id}`, {
+      signal: abortController.signal,
+      headers: { 'Accept': 'application/json' }
+    })
+    if (!response.ok) {
+      throw new Error(`API responded with status ${response.status}`)
+    }
+    const data = await response.json()
+    const imageUrl = extractImageUrl(data)
+    if (!imageUrl) {
+      throw new Error('No image URL found in API response')
+    }
+    return imageUrl
+  } finally {
+    clearTimeout(timeoutId)
+    abortController = null
   }
-  const data = await response.json()
-  const imageUrl = extractImageUrl(data)
-  if (!imageUrl) {
-    throw new Error('No image URL found in API response')
+}
+
+const cancelFetch = () => {
+  if (abortController) {
+    abortController.abort()
+    abortController = null
   }
-  return imageUrl
 }
 
 const onImageLoad = () => {
@@ -149,9 +172,11 @@ const dismiss = () => {
 const showVictory = async () => {
   isDismissing.value = false
   imageLoaded.value = false
+  currentImage.value = ''
   isFetching.value = true
 
   const id = pickRandomId()
+  currentCardTypeId.value = id
 
   try {
     currentImage.value = await fetchImageFromApi(id)
@@ -160,6 +185,12 @@ const showVictory = async () => {
     currentImage.value = getLocalImagePath(id)
   } finally {
     isFetching.value = false
+  }
+
+  try {
+    await saveUserCard(DEFAULT_USER_ID, currentCardTypeId.value, 'game_drop')
+  } catch (err) {
+    console.warn('Failed to save victory card:', err.message)
   }
 
   clearTimer()
@@ -172,6 +203,7 @@ watch(() => props.visible, (newVal) => {
   if (newVal) {
     showVictory()
   } else {
+    cancelFetch()
     clearTimer()
     isDismissing.value = false
     imageLoaded.value = false
@@ -180,6 +212,7 @@ watch(() => props.visible, (newVal) => {
 })
 
 onUnmounted(() => {
+  cancelFetch()
   clearTimer()
 })
 </script>
