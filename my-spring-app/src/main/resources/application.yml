@@ -11,9 +11,17 @@ spring:
 
 #配置mybatis实体和xml映射
 mybatis:
-  ##映射xml
   mapper-locations: classpath:mapper/*.xml
   configuration:
-    #配置日志
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
     map-underscore-to-camel-case: true
+
+# OpenAPI 集成配置（Shimmer Shop 精简 AWSv4 签名认证）
+openapi:
+  base-url: https://go.neusoft.edu.cn
+  base-path: /api/open/v1
+  login-path: /auth/login
+  server-name: go.neusoft.edu.cn
+  auth:
+    app-id: ${OPENAPI_APP_ID:}
+    api-key: ${OPENAPI_API_KEY:}

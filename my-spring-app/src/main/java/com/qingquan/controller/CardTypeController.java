@@ -1,6 +1,8 @@
 package com.qingquan.controller;
 
 import com.qingquan.common.Result;
+import com.qingquan.dto.CardTypeCreateDTO;
+import com.qingquan.dto.CardTypeUpdateDTO;
 import com.qingquan.entity.CardType;
 import com.qingquan.service.CardTypeService;
 import lombok.RequiredArgsConstructor;
@@ -26,13 +28,24 @@ public class CardTypeController {
     }
 
     @PostMapping
-    public Result<Void> add(@RequestBody CardType cardType) {
+    public Result<Void> add(@RequestBody CardTypeCreateDTO dto) {
+        CardType cardType = new CardType();
+        cardType.setCardName(dto.getCardName());
+        cardType.setIcon(dto.getIcon());
+        cardType.setTypeIndex(dto.getTypeIndex());
+        cardType.setIsEnable(dto.getIsEnable() != null ? dto.getIsEnable() : 1);
         cardTypeService.save(cardType);
         return Result.success();
     }
 
     @PutMapping
-    public Result<Void> update(@RequestBody CardType cardType) {
+    public Result<Void> update(@RequestBody CardTypeUpdateDTO dto) {
+        CardType cardType = new CardType();
+        cardType.setId(dto.getId());
+        cardType.setCardName(dto.getCardName());
+        cardType.setIcon(dto.getIcon());
+        cardType.setTypeIndex(dto.getTypeIndex());
+        cardType.setIsEnable(dto.getIsEnable());
         cardTypeService.update(cardType);
         return Result.success();
     }
