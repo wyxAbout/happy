@@ -21,20 +21,11 @@ public class OpenApiLoginController {
 
     @PostMapping("/login")
     public Result<LoginResponse> login(@RequestBody LoginRequest request) {
-        boolean hasCode = request.getCode() != null && !request.getCode().isBlank();
-        boolean hasState = request.getState() != null && !request.getState().isBlank();
-
-        if (!hasCode || !hasState) {
-            try {
-                LoginResponse response = loginService.getLoginUrl();
-                return Result.success("请跳转至登录页面完成身份认证", response);
-            } catch (OpenApiLoginService.OpenApiException e) {
-                log.warn("Get login URL failed [code={}]: {}", e.getCode(), e.getMessage());
-                return Result.error(e.getCode(), e.getMessage());
-            } catch (Exception e) {
-                log.error("Unexpected get login URL error", e);
-                return Result.error("系统内部错误，请稍后重试");
-            }
+        if (request.getCode() == null || request.getCode().isBlank()) {
+            return Result.error(400, "SSO 授权码 code 不能为空");
+        }
+        if (request.getState() == null || request.getState().isBlank()) {
+            return Result.error(400, "SSO state 不能为空");
         }
 
         try {

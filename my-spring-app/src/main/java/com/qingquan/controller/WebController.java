@@ -17,7 +17,6 @@ public class WebController {
         apis.put("login", "POST /api/auth/login");
         apis.put("card_types", "GET /api/card-types");
         apis.put("user_cards", "GET /api/user-cards");
-        apis.put("openapi_proxy", "/api/openapi/**");
         apis.put("hello", "GET /hello");
         info.put("endpoints", apis);
         return Result.success(info);

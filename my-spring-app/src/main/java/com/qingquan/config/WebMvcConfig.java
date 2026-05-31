@@ -14,7 +14,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(authInterceptor)
-                .addPathPatterns("/api/card-types/**", "/api/user-cards/**", "/api/openapi/**")
+                .addPathPatterns("/api/card-types/**", "/api/user-cards/**")
                 .excludePathPatterns("/api/auth/**");
     }
 }
