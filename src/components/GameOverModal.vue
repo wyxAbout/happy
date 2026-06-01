@@ -1,3 +1,48 @@
+<script setup>
+/**
+ * GameOverModal.vue — 游戏结算弹窗组件
+ *
+ * 【功能概述】
+ * 游戏结束（胜利或失败）时弹出的模态对话框。
+ * 显示最终得分、最高纪录，并提供"重新开始"/"下一关"操作按钮。
+ *
+ * 【Props】
+ * @prop {boolean} visible   - 是否显示弹窗
+ * @prop {boolean} isWin     - 是否胜利（true=胜利, false=失败）
+ * @prop {number}  score     - 最终得分
+ * @prop {number}  highScore - 历史最高分
+ * @prop {number}  level     - 当前关卡号
+ * @prop {number}  totalLevels - 总关卡数（默认 24）
+ *
+ * 【事件】
+ * @event restart   - 点击"重新开始"/"再来一局"
+ * @event nextLevel - 点击"下一关"
+ *
+ * 【使用示例】
+ *   <GameOverModal :visible="gameOver" :is-win="false" :score="1200" :high-score="5000" :level="3" @restart="handleRestart" />
+ */
+
+import { computed } from 'vue'
+
+const props = defineProps({
+  visible: Boolean,
+  isWin: Boolean,
+  score: Number,
+  highScore: Number,
+  level: Number,
+  totalLevels: {
+    type: Number,
+    default: 24
+  }
+})
+
+defineEmits(['restart', 'nextLevel'])
+
+const isLastLevel = computed(() => {
+  return props.level === props.totalLevels
+})
+</script>
+
 <template>
   <Teleport to="body">
     <div v-if="visible" class="modal-overlay fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
@@ -59,28 +104,6 @@
     </div>
   </Teleport>
 </template>
-
-<script setup>
-import { computed } from 'vue'
-
-const props = defineProps({
-  visible: Boolean,
-  isWin: Boolean,
-  score: Number,
-  highScore: Number,
-  level: Number,
-  totalLevels: {
-    type: Number,
-    default: 24
-  }
-})
-
-defineEmits(['restart', 'nextLevel'])
-
-const isLastLevel = computed(() => {
-  return props.level === props.totalLevels
-})
-</script>
 
 <style scoped>
 .modal-overlay {

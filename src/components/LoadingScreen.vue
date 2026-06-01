@@ -1,3 +1,38 @@
+<script setup>
+/**
+ * LoadingScreen.vue — 加载屏幕组件
+ *
+ * 【功能概述】
+ * 应用初始化时的全屏加载界面。
+ * 支持两种状态：
+ * - 正常加载：显示进度条（百分比 + 渐变进度条）
+ * - 加载失败：显示错误信息和"重新加载"按钮
+ *
+ * 【Props】
+ * @prop {number} progress - 加载进度（0~100）
+ * @prop {string|null} error - 错误信息，非 null 时显示错误状态
+ *
+ * 【事件】
+ * @event retry - 用户点击"重新加载"按钮
+ *
+ * 【使用示例】
+ *   <LoadingScreen :progress="50" :error="null" @retry="handleRetry" />
+ */
+
+defineProps({
+  progress: {
+    type: Number,
+    default: 0
+  },
+  error: {
+    type: String,
+    default: null
+  }
+})
+
+defineEmits(['retry'])
+</script>
+
 <template>
   <div class="loading-screen fixed inset-0 bg-gradient-to-b from-[#4793cf] to-[#5db6e0] flex items-center justify-center z-50">
     <div class="loading-content text-center text-white max-w-sm mx-auto px-6">
@@ -36,21 +71,6 @@
     </div>
   </div>
 </template>
-
-<script setup>
-defineProps({
-  progress: {
-    type: Number,
-    default: 0
-  },
-  error: {
-    type: String,
-    default: null
-  }
-})
-
-defineEmits(['retry'])
-</script>
 
 <style scoped>
 @keyframes bounce {

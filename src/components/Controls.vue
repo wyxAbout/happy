@@ -1,3 +1,29 @@
+<script setup>
+/**
+ * Controls.vue — 游戏控制按钮组件
+ *
+ * 【功能概述】
+ * 提供三个游戏控制按钮：重新开始、重新排列、提示。
+ * 每个按钮通过 emit 向上传递事件，父组件（App.vue）处理具体逻辑。
+ *
+ * 【事件】
+ * @event restart - 点击"重新开始"按钮
+ * @event shuffle - 点击"重新排列"按钮
+ * @event hint   - 点击"提示"按钮
+ *
+ * 【样式特性】
+ * - 毛玻璃效果（bg-white/10 + backdrop-blur-md）
+ * - hover 时上浮（-translate-y-1）并增强阴影
+ * - active 时缩小（scale-[0.97]）
+ * - 内置 SVG 图标，无外部依赖
+ *
+ * 【使用示例】
+ *   <Controls @restart="handleRestart" @shuffle="handleShuffle" @hint="handleHint" />
+ */
+
+defineEmits(['restart', 'shuffle', 'hint'])
+</script>
+
 <template>
   <div class="controls flex gap-2.5 mt-3">
     <button
@@ -60,10 +86,6 @@
     </button>
   </div>
 </template>
-
-<script setup>
-defineEmits(['restart', 'shuffle', 'hint'])
-</script>
 
 <style scoped>
 .controls {

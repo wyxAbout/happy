@@ -1,3 +1,35 @@
+<script setup>
+/**
+ * ProgressBar.vue — 进度条组件
+ *
+ * 【功能概述】
+ * 显示当前分数相对于目标分数的完成百分比进度。
+ * 进度条使用渐变色彩（橙→黄→绿），有发光阴影效果。
+ *
+ * 【计算逻辑】
+ * progress = min(100, (score / target) × 100)
+ * 上限为 100%，防止超额时超出显示。
+ *
+ * 【Props】
+ * @prop {number} score  - 当前得分
+ * @prop {number} target - 目标分数
+ *
+ * 【使用示例】
+ *   <ProgressBar :score="score" :target="target" />
+ */
+
+import { computed } from 'vue'
+
+const props = defineProps({
+  score: Number,
+  target: Number
+})
+
+const progress = computed(() => {
+  return Math.min(100, (props.score / props.target) * 100)
+})
+</script>
+
 <template>
   <div class="progress-bar-container mt-3">
     <div class="progress-bar bg-white/10 backdrop-blur-sm rounded-full h-3.5 overflow-hidden shadow-inner border border-white/10">
@@ -12,19 +44,6 @@
     </div>
   </div>
 </template>
-
-<script setup>
-import { computed } from 'vue'
-
-const props = defineProps({
-  score: Number,
-  target: Number
-})
-
-const progress = computed(() => {
-  return Math.min(100, (props.score / props.target) * 100)
-})
-</script>
 
 <style scoped>
 .progress-bar-container {

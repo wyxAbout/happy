@@ -1,3 +1,124 @@
+<script setup>
+/**
+ * LevelSelector.vue — 关卡选择器组件
+ *
+ * 【功能概述】
+ * 显示所有关卡的网格选择面板，包含：
+ * - 关卡按钮网格（⭐ = 已完成, 🔒 = 未解锁, 数字 = 可玩）
+ * - 进度统计（已完成数 / 总数）
+ * - "重新开始"按钮（清除所有关卡记录）
+ *
+ * 【关卡解锁规则】
+ * - 线性递进：第 N 关需要第 N-1 关已通关才能解锁
+ * - 第 1 关始终解锁
+ * - 数据来源：props.completedLevels（来自 localStorage 的关卡记录）
+ *
+ * 【Props】
+ * @prop {boolean} visible         - 是否显示面板
+ * @prop {number[]} completedLevels - 已通关关卡编号数组
+ * @prop {number} currentLevel     - 当前所在关卡
+ * @prop {number} totalLevels      - 关卡总数（默认 24）
+ *
+ * 【事件】
+ * @event close        - 关闭面板
+ * @event select-level - 选中关卡，携带关卡编号
+ * @event reset-all    - 重置所有关卡进度
+ *
+ * 【使用示例】
+ *   <LevelSelector :visible="show" :completed-levels="[1,2,3]" :current-level="3" @select-level="handleGoToLevel" @close="show=false" />
+ */
+
+const props = defineProps({
+  visible: {
+    type: Boolean,
+    default: false
+  },
+  completedLevels: {
+    type: Array,
+    default: () => []
+  },
+  currentLevel: {
+    type: Number,
+    default: 1
+  },
+  totalLevels: {
+    type: Number,
+    default: 24
+  }
+})
+
+const emit = defineEmits(['close', 'select-level', 'reset-all'])
+
+/**
+ * 检查关卡是否已完成（⭐）
+ * @param {number} levelNum - 关卡编号
+ * @returns {boolean}
+ */
+const isLevelCompleted = (levelNum) => {
+  return props.completedLevels.includes(levelNum)
+}
+
+/**
+ * 【关卡持久化-UI解锁判定】
+ *
+ * 关卡解锁遵循"线性递进"规则：
+ *   - 第1关始终解锁
+ *   - 第N关解锁条件：第N-1关必须已完成（completedLevels 中包含 N-1）
+ *
+ * 由于 completedLevels 数据来自 localStorage（永久存储），
+ * 只要 completedLevels 中有数据，对应的后续关卡就会显示为解锁状态。
+ *
+ * 数据流：
+ *   localStorage["happy-match-completed-levels"]
+ *     → loadCompletedLevels() → completedLevels.value (Vue ref)
+ *       → props.completedLevels (父传子 prop)
+ *         → isLevelUnlocked(n) → 决定按钮是否可点击
+ *
+ * 因此，本地存储有数据 → 内存中有数据 → UI 显示已解锁 → "关卡不会重置"
+ *
+ * @param {number} levelNum
+ * @returns {boolean}
+ */
+const isLevelUnlocked = (levelNum) => {
+  if (levelNum === 1) return true
+  return props.completedLevels.includes(levelNum - 1)
+}
+
+/**
+ * 获取关卡按钮的 CSS 类
+ * 根据状态（未解锁/已完成/当前）返回不同的渐变和样式
+ * @param {number} levelNum
+ * @returns {string[]}
+ */
+const getLevelClass = (levelNum) => {
+  if (!isLevelUnlocked(levelNum)) {
+    return 'bg-gray-200 text-gray-400 cursor-not-allowed'
+  }
+  if (isLevelCompleted(levelNum)) {
+    return levelNum === props.currentLevel
+      ? 'bg-gradient-to-br from-yellow-400 to-orange-500 text-white ring-2 ring-orange-400 shadow-lg'
+      : 'bg-gradient-to-br from-green-400 to-emerald-500 text-white'
+  }
+  if (levelNum === props.currentLevel) {
+    return 'bg-gradient-to-br from-purple-500 to-pink-500 text-white ring-2 ring-purple-400 shadow-lg'
+  }
+  return 'bg-gradient-to-br from-blue-400 to-indigo-500 text-white hover:scale-105 hover:shadow-lg'
+}
+
+const selectLevel = (levelNum) => {
+  if (isLevelUnlocked(levelNum)) {
+    emit('select-level', levelNum)
+    emit('close')
+  }
+}
+
+const handleResetAll = () => {
+  if (confirm('确定要重置所有关卡进度吗？此操作无法撤销。')) {
+    emit('reset-all')
+  }
+}
+</script>
+
 <template>
   <Teleport to="body">
     <div v-if="visible" class="level-selector-overlay fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -72,66 +193,6 @@
     </div>
   </Teleport>
 </template>
-
-<script setup>
-const props = defineProps({
-  visible: {
-    type: Boolean,
-    default: false
-  },
-  completedLevels: {
-    type: Array,
-    default: () => []
-  },
-  currentLevel: {
-    type: Number,
-    default: 1
-  },
-  totalLevels: {
-    type: Number,
-    default: 24
-  }
-})
-
-const emit = defineEmits(['close', 'select-level', 'reset-all'])
-
-const isLevelCompleted = (levelNum) => {
-  return props.completedLevels.includes(levelNum)
-}
-
-const isLevelUnlocked = (levelNum) => {
-  if (levelNum === 1) return true
-  return props.completedLevels.includes(levelNum - 1)
-}
-
-const getLevelClass = (levelNum) => {
-  if (!isLevelUnlocked(levelNum)) {
-    return 'bg-gray-200 text-gray-400 cursor-not-allowed'
-  }
-  if (isLevelCompleted(levelNum)) {
-    return levelNum === props.currentLevel
-      ? 'bg-gradient-to-br from-yellow-400 to-orange-500 text-white ring-2 ring-orange-400 shadow-lg'
-      : 'bg-gradient-to-br from-green-400 to-emerald-500 text-white'
-  }
-  if (levelNum === props.currentLevel) {
-    return 'bg-gradient-to-br from-purple-500 to-pink-500 text-white ring-2 ring-purple-400 shadow-lg'
-  }
-  return 'bg-gradient-to-br from-blue-400 to-indigo-500 text-white hover:scale-105 hover:shadow-lg'
-}
-
-const selectLevel = (levelNum) => {
-  if (isLevelUnlocked(levelNum)) {
-    emit('select-level', levelNum)
-    emit('close')
-  }
-}
-
-const handleResetAll = () => {
-  if (confirm('确定要重置所有关卡进度吗？此操作无法撤销。')) {
-    emit('reset-all')
-  }
-}
-</script>
 
 <style scoped>
 .level-selector-overlay {

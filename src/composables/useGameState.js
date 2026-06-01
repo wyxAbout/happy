@@ -1,6 +1,7 @@
 import { ref, computed, watch } from 'vue'
 import { GRID_SIZE, TILE_TYPES, MIN_MATCH, BASE_SCORE, COMBO_MULTIPLIER, STORAGE_KEYS, LEVEL_CONFIG, DDC_CONFIG, DEFAULT_EMOJIS, ICONS_DIR, TOTAL_LEVELS } from '../constants'
 import { useImageCache } from './useImageCache'
+import { storage } from '../api/storageService'
 
 const debugLog = (...args) => {
   if (import.meta.env.DEV) console.log(...args)
@@ -34,6 +35,21 @@ export function useGameState() {
   const ddcSpecialBoostModifier = ref(0)
   const activeTileTypes = ref(TILE_TYPES)
 
+  /**
+   * 【防刷分-特殊方块链计数器】
+   *
+   * 每次触发特殊方块消除（processSpecialClear / processDoubleSpecialClear）时 +1，
+   * 当进行普通方块交换时重置为 0。
+   *
+   * 用于防止以下刷分漏洞：
+   *   玩家反复用特殊方块消除 → processGame 产生新特殊方块 → 再消除 → 无限循环
+   *
+   * 计数器影响两个维度：
+   *   - 得分衰减（gameSpecialLogic）：chain≥1 时每次 -25%，最低 25%
+   *   - 生成衰减（processGame）：chain≥2 时 boostChance 减半/capped
+   */
+  const specialChainCount = ref(0)
+
   const { loadImage, preloadImages, clearCache, cacheStats } = useImageCache()
 
   const useCustomIcons = computed(() => customIcons.value.length >= TILE_TYPES)
@@ -45,7 +61,7 @@ export function useGameState() {
 
   const loadHighScore = () => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEYS.HIGH_SCORE)
+      const saved = storage.getItem(STORAGE_KEYS.HIGH_SCORE)
       if (saved) {
         highScore.value = parseInt(saved, 10)
       }
@@ -58,16 +74,32 @@ export function useGameState() {
     try {
       if (score.value > highScore.value) {
         highScore.value = score.value
-        localStorage.setItem(STORAGE_KEYS.HIGH_SCORE, highScore.value.toString())
+        storage.setItem(STORAGE_KEYS.HIGH_SCORE, highScore.value.toString())
       }
     } catch (e) {
       console.error('Failed to save high score:', e)
     }
   }
 
+  /**
+   * 【关卡持久化-读取】
+   * 
+   * 应用启动时调用（见 initializeGame），从 localStorage 读取已通关列表。
+   * 如果 localStorage 中存有 completedLevels 键（即之前通关过），
+   * 则直接恢复到内存变量 completedLevels.value 中，前端 UI 据此显示已解锁关卡。
+   * 
+   * 这是关卡"不会重置"的核心环节：
+   *   1. 用户通关 → saveCompletedLevels() 写入 localStorage
+   *   2. 关闭浏览器 → localStorage 数据保留（不同于 sessionStorage）
+   *   3. 再次打开 → loadCompletedLevels() 从 localStorage 恢复到内存
+   *   4. UI 渲染时 → completedLevels.value 中已有历史数据，关卡保持解锁
+   * 
+   * 三元组关系：
+   *   localStorage["happy-match-completed-levels"] → JSON.parse() → completedLevels.value → LevelSelector UI
+   */
   const loadCompletedLevels = () => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEYS.COMPLETED_LEVELS)
+      const saved = storage.getItem(STORAGE_KEYS.COMPLETED_LEVELS)
       if (saved) {
         completedLevels.value = JSON.parse(saved)
       }
@@ -79,7 +111,7 @@ export function useGameState() {
 
   const loadDDCStreak = () => {
     try {
-      const saved = localStorage.getItem(DDC_CONFIG.streakStorageKey)
+      const saved = storage.getItem(DDC_CONFIG.streakStorageKey)
       if (saved) {
         const data = JSON.parse(saved)
         consecutiveWins.value = data.wins || 0
@@ -93,7 +125,7 @@ export function useGameState() {
 
   const saveDDCStreak = () => {
     try {
-      localStorage.setItem(DDC_CONFIG.streakStorageKey, JSON.stringify({
+      storage.setItem(DDC_CONFIG.streakStorageKey, JSON.stringify({
         wins: consecutiveWins.value,
         losses: consecutiveLosses.value
       }))
@@ -130,18 +162,60 @@ export function useGameState() {
     }
   }
 
+  /**
+   * 【关卡持久化-写入】
+   *
+   * 每次 unlockNextLevel() 被调用（即玩家通关），
+   * 都会将最新的 completedLevels 数组序列化为 JSON 字符串写入 localStorage。
+   *
+   * 写入时机链：
+   *   通关触发 → completeLevel() → unlockNextLevel() → saveCompletedLevels() → localStorage
+   *
+   * 由于 localStorage 的持久性特性：
+   *   - setItem() 写入后，数据被存储在浏览器的磁盘文件中
+   *   - 即使关闭浏览器、关机重启，数据也不会丢失
+   *   - 只有通过 removeItem() 或 clear() 或浏览器"清除数据"才会删除
+   *
+   * 因此只要本函数被调用过，关卡数据就会被"永久"记录。
+   */
   const saveCompletedLevels = () => {
     try {
-      localStorage.setItem(STORAGE_KEYS.COMPLETED_LEVELS, JSON.stringify(completedLevels.value))
+      storage.setItem(STORAGE_KEYS.COMPLETED_LEVELS, JSON.stringify(completedLevels.value))
     } catch (e) {
       console.error('Failed to save completed levels:', e)
     }
   }
 
+  /**
+   * 【关卡持久化-判已完成】
+   *
+   * 单纯检查内存中的 completedLevels.value 数组是否包含指定关卡号。
+   * 不涉及任何持久化读写，仅做内存级别的 O(n) 数组查找。
+   *
+   * 被 LevelSelector 组件调用以渲染 ⭐ 图标。
+   */
   const isLevelCompleted = (levelNum) => {
     return completedLevels.value.includes(levelNum)
   }
 
+  /**
+   * 【关卡持久化-核心写入触发点】
+   *
+   * 这是整个关卡持久化的"触发器"——每次玩家完成一关就会调用此函数。
+   *
+   * 流程：
+   *   1. 检查当前关卡是否已在 completedLevels 中（防止重复添加）
+   *   2. 若未记录过 → 将当前关卡号 push 进数组
+   *   3. 对数组排序（保持 [1,2,3,...] 的顺序）
+   *   4. 调用 saveCompletedLevels() 将最新数组持久化到 localStorage
+   *
+   * 调用链（两条路径都会触发）：
+   *   正常通关：checkLevelComplete() → completeLevel() → unlockNextLevel()
+   *   手动过关：checkGameStatus() → unlockNextLevel()
+   *
+   * 由于每次通关都立即调用 saveCompletedLevels() 写入 localStorage，
+   * 即使页面崩溃或意外关闭，上一次通关的关卡也会被保留。
+   */
   const unlockNextLevel = () => {
     if (!completedLevels.value.includes(level.value)) {
       completedLevels.value.push(level.value)
@@ -167,7 +241,7 @@ export function useGameState() {
         moves: moves.value,
         target: target.value
       }
-      localStorage.setItem(STORAGE_KEYS.GAME_STATE, JSON.stringify(state))
+      storage.setItem(STORAGE_KEYS.GAME_STATE, JSON.stringify(state))
     } catch (e) {
       console.error('Failed to save game state:', e)
     }
@@ -175,7 +249,7 @@ export function useGameState() {
 
   const loadGameState = () => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEYS.GAME_STATE)
+      const saved = storage.getItem(STORAGE_KEYS.GAME_STATE)
       if (saved) {
         const state = JSON.parse(saved)
         grid.value = state.grid
@@ -193,7 +267,7 @@ export function useGameState() {
 
   const clearGameState = () => {
     try {
-      localStorage.removeItem(STORAGE_KEYS.GAME_STATE)
+      storage.removeItem(STORAGE_KEYS.GAME_STATE)
     } catch (e) {
       console.error('Failed to clear game state:', e)
     }
@@ -410,6 +484,25 @@ export function useGameState() {
     }
   }
 
+  /**
+   * 【关卡持久化-重要区分】
+   *
+   * resetGame() 只重置“当前游戏状态”（分数、当前关卡号、棋盘等），
+   * 不会重置 completedLevels 数组或清除 localStorage 中的关卡记录。
+   *
+   * 这意味着：
+   *   - 点击"重新开始"按钮 → resetGame() → 回到第1关重新玩
+   *   - 但 LevelSelector 中依然显示之前通关的所有 ⭐
+   *   - localStorage 中的关卡数据不受影响
+   *
+   * 要真正清除关卡进度，需要调用 App.vue 中的 handleResetAllLevels()，
+   * 它直接操作 storage.removeItem() 并清空 completedLevels.value。
+   *
+   * resetGame() 不重置的内容（有意设计）：
+   *   - completedLevels    ← 关卡通关记录保留
+   *   - highScore          ← 最高分保留
+   *   - consecutiveWins/Losses ← DDC 连胜记录保留
+   */
   const resetGame = () => {
     score.value = 0
     level.value = 1
@@ -531,30 +624,49 @@ export function useGameState() {
 
   const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms))
 
+  /**
+   * 【关卡持久化-应用启动总入口】
+   *
+   * App.vue onMounted → useGameLogic.onMounted → initializeGame()
+   *
+   * 加载顺序：
+   *   1. loadCustomIcons()      → 加载方块图标（仅影响视觉效果）
+   *   2. preloadAllImages()    → 预加载图片到内存缓存
+   *   3. loadHighScore()       → 从 localStorage 恢复最高分
+   *   4. loadCompletedLevels() → ★ 从 localStorage 恢复已通关列表 ★
+   *   5. loadDDCStreak()       → 从 localStorage 恢复连胜/连败记录
+   *   6. initGrid()            → 生成初始棋盘
+   *
+   * 第4步 loadCompletedLevels() 就是关卡"不会重置"的直接原因：
+   *   每次应用启动都会执行，从 localStorage 读取历史数据到内存。
+   *
+   * 只有当 localStorage 中没有对应键（首次使用 或 被手动清除）
+   * 时，completedLevels.value 才会是空数组 []。
+   */
   const initializeGame = async () => {
     isLoading.value = true
     loadError.value = null
     loadProgress.value = 0
-    
+
     try {
       debugLog('Starting game initialization...')
-      
+
       await loadCustomIcons()
-      
+
       debugLog('Preloading images...')
       loadProgress.value = 50
       await preloadAllImages()
-      
+
       loadHighScore()
       loadCompletedLevels()
       loadDDCStreak()
-      
+
       loadProgress.value = 100
       debugLog('All resources loaded, initializing grid...')
       initGrid()
-      
+
       debugLog('Game initialization complete!')
-      
+
     } catch (error) {
       console.error('Failed to initialize game:', error)
       loadError.value = error.message || '加载资源失败，请刷新页面重试'
@@ -619,6 +731,7 @@ export function useGameState() {
     ddcMovesModifier,
     ddcSpecialBoostModifier,
     activeTileTypes,
+    specialChainCount,
     loadDDCStreak,
     recordLevelWin,
     recordLevelLoss,

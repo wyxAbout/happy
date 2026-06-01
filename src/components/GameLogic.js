@@ -1,9 +1,64 @@
+/**
+ * GameLogic.js — 消消乐核心游戏引擎
+ *
+ * 【功能概述】
+ * 这是整个游戏的中枢神经系统，编排所有游戏逻辑：
+ * - 方块点击/交换处理
+ * - 匹配检测（横向、纵向、交叉 → 炸弹）
+ * - 消除动画流程（标记 → 弹跳 → 清空 → 下落 → 填充）
+ * - 特殊方块系统（整行消除/整列消除/炸弹 3×3）
+ * - 连击系统（combo 计数 + 倍率加成）
+ * - DDC 自适应难度（根据连胜/连败动态调整步数和特殊方块概率）
+ * - 关卡持久化（通关记录 → localStorage）
+ * - 游戏状态管理（分数/步数/目标/游戏结束判定）
+ *
+ * 【架构设计】
+ * GameLogic.js 是 Composable 模式的聚合层：
+ *   useGameState()  → 数据层（grid, score, moves, level 等响应式状态）
+ *   useSound()      → 音效层（合成音效播放）
+ *   本文件内的函数 → 逻辑层（消除流程编排、交换判定、动画控制）
+ *
+ * 【关键函数调用链】
+ * 用户操作 → handleTileClick/handleSwap
+ *   → processSwap (检查特殊方块)
+ *     → swapTiles (交换两个方块)
+ *     → processSpecialClear / processDoubleSpecialClear (特殊消除)
+ *     → processGame (标准消除循环)
+ *       → findMatches (匹配检测)
+ *       → 标记 elimination → delay → 清空
+ *       → dropIcons (现有方块下落)
+ *       → fillEmptyCells (新方块填充)
+ *       → 循环直到无匹配
+ *     → checkGameStatus (检查通关/失败)
+ *
+ * 【使用示例】
+ *   import { useGameLogic } from './components/GameLogic'
+ *   const { grid, score, handleTileClick, handleSwap, ... } = useGameLogic()
+ */
+
 import { ref, onMounted, nextTick } from 'vue'
 import { useGameState } from '../composables/useGameState'
 import { useSound } from '../composables/useSound'
+import { createSpecialClear } from './gameSpecialLogic'
 import { GRID_SIZE, BASE_SCORE, COMBO_MULTIPLIER, SPECIAL_CLEAR_SCORE_MULTIPLIER, DROP_BASE_DELAY, DROP_SPEED_PER_CELL, LEVEL_CONFIG } from '../constants'
 
 export function useGameLogic() {
+  /**
+   * ======================== 数据层（来自 useGameState） ========================
+   * grid:            棋盘数据 ref<Array>，每个元素是 {icon, selected, matched, falling, ...}
+   * score:           当前分数
+   * level:           当前关卡号
+   * moves:           剩余步数
+   * target:          通关目标分数
+   * selectedIndex:   当前选中的方块索引（null = 未选中）
+   * isAnimating:     是否正在执行动画（锁定操作）
+   * gameOver:        游戏是否结束
+   * levelComplete:   当前关卡是否完成
+   * combo:           当前连击数
+   * message:         状态消息文本
+   * highScore:       历史最高分
+   * completedLevels: 已通关关卡列表
+   */
   const {
     grid,
     score,
@@ -48,9 +103,13 @@ export function useGameLogic() {
     consecutiveLosses,
     ddcSpecialBoostModifier,
     ddcMovesModifier,
-    activeTileTypes
+    activeTileTypes,
+    specialChainCount
   } = useGameState()
 
+  /**
+   * ======================== 音效层（来自 useSound） ========================
+   */
   const {
     playMatch,
     playCombo,
@@ -67,6 +126,26 @@ export function useGameLogic() {
   const messageType = ref('info')
   const showVictoryOverlay = ref(false)
 
+  /**
+   * ======================== 核心游戏循环 ========================
+   *
+   * processGame — 消除→下落→填充的完整流程
+   *
+   * 流程：
+   * 1. findMatches() 检测所有匹配（横向≥3、纵向≥3、交叉→炸弹）
+   * 2. 标记匹配方块为 matched/popping 状态
+   * 3. 处理特殊方块候选（≥4连消 → 整行/整列）
+   * 4. delay 等待消除动画（300ms）
+   * 5. 清空已消除方块 + 创建特殊方块标记
+   * 6. delay（100ms）
+   * 7. 连击≥2 时有机会生成额外特殊方块（概率 = LEVEL_CONFIG.specialBoost + DDC修正）
+   * 8. dropIcons() → fillEmptyCells() → 循环直到无匹配
+   * 9. checkGameStatus() 检查通关/失败
+   * 10. 无有效移动时 shuffleGridUntilValid() 自动重排
+   * 11. saveGameState() 持久化当前游戏状态
+   *
+   * @returns {Promise<void>}
+   */
   const processGame = async () => {
     let { matches, specialCandidates } = findMatches()
     combo.value = 0
@@ -120,8 +199,14 @@ export function useGameLogic() {
 
       if (combo.value >= 2) {
         const lvlConfig = LEVEL_CONFIG[level.value] || LEVEL_CONFIG[1]
-        const boostChance = (lvlConfig.specialBoost || 0.05) + ddcSpecialBoostModifier.value
-        if (Math.random() < boostChance) {
+        const rawChance = (lvlConfig.specialBoost || 0.05) + ddcSpecialBoostModifier.value
+        const chain = specialChainCount.value
+        const effectiveChance = chain >= 4
+          ? 0
+          : chain >= 2
+            ? rawChance / Math.pow(2, chain - 1)
+            : rawChance
+        if (Math.random() < effectiveChance) {
           const emptyCells = []
           for (let i = 0; i < grid.value.length; i++) {
             if (!grid.value[i].icon || grid.value[i].icon === '') {
@@ -164,6 +249,19 @@ export function useGameLogic() {
     saveGameState()
   }
 
+  /**
+   * dropIcons — 现有方块重力下落
+   *
+   * 列遍历：从底部向上扫描每列，遇到非空方块就"虚拟上移"到 writeRow 位置。
+   * writeRow 从底部（GRID_SIZE-1）开始，每放置一个方块就上移一行。
+   *
+   * 动画机制：
+   * - fallPhase='start'：设置方块在起始位置（上方），transition=none
+   * - nextTick + delay(30) → fallPhase='end'：CSS transition 驱动下落动画
+   * - delay(DROP_BASE_DELAY + maxFallDistance * DROP_SPEED_PER_CELL)：等待动画完成
+   *
+   * @returns {Promise<void>}
+   */
   const dropIcons = async () => {
     let maxFallDistance = 0
 
@@ -235,6 +333,14 @@ export function useGameLogic() {
     }
   }
 
+  /**
+   * fillEmptyCells — 填充空单元格（新方块从"屏幕外"掉落）
+   *
+   * 列遍历：统计每列空位数量，从顶部生成新方块填充。
+   * 新方块的 fallDistance = 该列空位数 - 填充顺序（从底部第一空位=最大 fallDistance）。
+   *
+   * @returns {Promise<void>}
+   */
   const fillEmptyCells = async () => {
     let maxFallDistance = 0
 
@@ -300,6 +406,30 @@ export function useGameLogic() {
     }
   }
 
+  /**
+   * ======================== 特殊消除层（来自 gameSpecialLogic） ========================
+   */
+  const {
+    collectSpecialArea,
+    processSpecialClear,
+    processDoubleSpecialClear
+  } = createSpecialClear({
+    grid,
+    score,
+    message,
+    messageType,
+    playSpecialClear,
+    playDoubleSpecialClear,
+    delay,
+    dropIcons,
+    fillEmptyCells,
+    specialChainCount
+  })
+
+  /**
+   * shuffleGridUntilValid — 重排棋盘直到存在有效移动
+   * 最多尝试 100 次，防止无限循环
+   */
   const shuffleGridUntilValid = () => {
     let attempts = 0
     do {
@@ -308,6 +438,20 @@ export function useGameLogic() {
     } while (!hasValidMoves() && attempts < 100)
   }
 
+  /**
+   * checkGameStatus — 检查游戏是否通关或失败
+   *
+   * 通关条件：score >= target
+   * 失败条件：moves <= 0
+   *
+   * 通关后链式操作：
+   *   recordLevelWin() → consecutiveWins++, consecutiveLosses=0 (DDC)
+   *   unlockNextLevel() → 保存关卡到 completedLevels + localStorage
+   *   showVictoryOverlay = true → 触发 VictoryOverlay 组件
+   *   playVictory() → 播放胜利音效
+   *   saveHighScore() → 更新最高分
+   *   clearGameState() → 清除棋盘快照
+   */
   const checkGameStatus = () => {
     if (score.value >= target.value) {
       score.value = target.value
@@ -335,66 +479,21 @@ export function useGameLogic() {
     }
   }
 
-  const collectSpecialArea = (indices, index, direction) => {
-    const row = Math.floor(index / GRID_SIZE)
-    const col = index % GRID_SIZE
-
-    if (direction === 'horizontal') {
-      for (let c = 0; c < GRID_SIZE; c++) {
-        indices.add(row * GRID_SIZE + c)
-      }
-    } else if (direction === 'vertical') {
-      for (let r = 0; r < GRID_SIZE; r++) {
-        indices.add(r * GRID_SIZE + col)
-      }
-    } else if (direction === 'bomb') {
-      for (let dr = -1; dr <= 1; dr++) {
-        for (let dc = -1; dc <= 1; dc++) {
-          const r = row + dr
-          const c = col + dc
-          if (r >= 0 && r < GRID_SIZE && c >= 0 && c < GRID_SIZE) {
-            indices.add(r * GRID_SIZE + c)
-          }
-        }
-      }
-    }
-  }
-
-  const processDoubleSpecialClear = async (fromIndex, toIndex, fromDir, toDir) => {
-    const toClear = new Set()
-    collectSpecialArea(toClear, toIndex, fromDir)
-    collectSpecialArea(toClear, fromIndex, toDir)
-
-    const nonEmpty = [...toClear].filter(idx => {
-      const tile = grid.value[idx]
-      return tile && tile.icon && tile.icon !== ''
-    })
-
-    nonEmpty.forEach(idx => {
-      grid.value[idx].matched = true
-      grid.value[idx].popping = true
-    })
-
-    score.value += Math.floor(nonEmpty.length * BASE_SCORE * SPECIAL_CLEAR_SCORE_MULTIPLIER * 1.5)
-    message.value = `双重特殊消除！清除 ${nonEmpty.length} 个！`
-    messageType.value = 'success'
-    playDoubleSpecialClear()
-
-    await delay(400)
-
-    nonEmpty.forEach(idx => {
-      grid.value[idx].icon = ''
-      grid.value[idx].matched = false
-      grid.value[idx].popping = false
-      grid.value[idx].special = null
-      grid.value[idx].specialActivated = false
-    })
-
-    await delay(100)
-    await dropIcons()
-    await fillEmptyCells()
-  }
-
+  /**
+   * processSwap — 方块交换处理（四类场景）
+   *
+   * 场景1：双方都是特殊方块 → 双重特殊消除
+   * 场景2：只有 from 是特殊方块 → 特殊消除在 to 位置
+   * 场景3：只有 to 是特殊方块 → 特殊消除在 from 位置
+   * 场景4：双方都是普通方块 → 检查是否有匹配（无匹配则回交换）
+   *
+   * 注意：特殊方块交换不会扣步数（已在交换清除内部处理）
+   *
+   * @param {number}  fromIndex   - 来源方块索引
+   * @param {number}  toIndex     - 目标方块索引
+   * @param {string|null} fromSpecial - from 的特殊类型
+   * @param {string|null} toSpecial   - to 的特殊类型
+   */
   const processSwap = async (fromIndex, toIndex, fromSpecial, toSpecial) => {
     swapTiles(fromIndex, toIndex)
 
@@ -428,6 +527,7 @@ export function useGameLogic() {
       selectedIndex.value = null
       await processGame()
     } else {
+      specialChainCount.value = 0
       const { matches } = findMatches()
       if (matches.length > 0) {
         playSwap()
@@ -445,6 +545,17 @@ export function useGameLogic() {
     }
   }
 
+  /**
+   * handleTileClick — 方块点击处理
+   *
+   * 三种状态转换：
+   * 1. 无选中 (selectedIndex = null)：选中当前方块
+   * 2. 已选中且点击同一方块：取消选中
+   * 3. 已选中且点击相邻方块：尝试交换
+   * 4. 已选中但点击非相邻方块：切换选中到新方块
+   *
+   * @param {number} index - 被点击的方块索引
+   */
   const handleTileClick = async (index) => {
     if (isAnimating.value || gameOver.value || levelComplete.value) return
 
@@ -480,53 +591,20 @@ export function useGameLogic() {
     }
   }
 
-  const processSpecialClear = async (index, direction) => {
-    const toClear = new Set()
-    collectSpecialArea(toClear, index, direction)
-
-    if (direction === 'horizontal') {
-      message.value = '横向消除！整行清除！'
-    } else if (direction === 'vertical') {
-      message.value = '纵向消除！整列清除！'
-    } else if (direction === 'bomb') {
-      message.value = '炸弹消除！3×3范围清除！'
-    }
-    messageType.value = 'success'
-    playSpecialClear()
-
-    const nonEmpty = [...toClear].filter(idx => {
-      const tile = grid.value[idx]
-      return tile && tile.icon && tile.icon !== ''
-    })
-
-    nonEmpty.forEach(idx => {
-      grid.value[idx].matched = true
-      grid.value[idx].popping = true
-    })
-
-    score.value += Math.floor(nonEmpty.length * BASE_SCORE * SPECIAL_CLEAR_SCORE_MULTIPLIER)
-
-    await delay(400)
-
-    nonEmpty.forEach(idx => {
-      grid.value[idx].icon = ''
-      grid.value[idx].matched = false
-      grid.value[idx].popping = false
-      grid.value[idx].special = null
-      grid.value[idx].specialActivated = false
-    })
-
-    await delay(100)
-
-    await dropIcons()
-    await fillEmptyCells()
-  }
-
+  /**
+   * handleRestart — 重新开始当前关卡
+   * 播放开始音效，调用 resetGame() 重置所有状态
+   */
   const handleRestart = () => {
+    specialChainCount.value = 0
     playGameStart()
     resetGame()
   }
 
+  /**
+   * handleShuffle — 重新排列棋盘
+   * 在动画锁定期间不可用。重排后清除下落动画状态。
+   */
   const handleShuffle = async () => {
     if (isAnimating.value) return
     isAnimating.value = true
@@ -549,6 +627,13 @@ export function useGameLogic() {
     isAnimating.value = false
   }
 
+  /**
+   * handleHint — 提示有效移动
+   *
+   * 遍历所有相邻方块对，尝试交换后检查是否产生匹配。
+   * 找到第一个有效交换后高亮两个方块 2 秒。
+   * 时间复杂度：O(GRID_SIZE²)
+   */
   const handleHint = () => {
     if (isAnimating.value || gameOver.value || levelComplete.value) return
 
@@ -591,10 +676,22 @@ export function useGameLogic() {
     showVictoryOverlay.value = false
   }
 
+  /**
+   * 生命周期：挂载时初始化游戏
+   */
   onMounted(async () => {
     await initializeGame()
   })
 
+  /**
+   * handleSwap — 滑动手势触发的交换入口
+   *
+   * 来自 GameGrid 组件的 @swap 事件。
+   * 与 handleTileClick 不同：这里从滑动手势获取 from/to 索引，
+   * 不依赖 selectedIndex 状态。
+   *
+   * @param {{from: number, to: number}} payload - 交换的两个方块索引
+   */
   const handleSwap = async ({ from, to }) => {
     if (isAnimating.value || gameOver.value || levelComplete.value) return
     if (!isAdjacent(from, to)) return

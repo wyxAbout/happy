@@ -21,8 +21,32 @@
             @error="onImageError"
           />
         </div>
-        <div class="victory-hint" v-if="imageLoaded">
-          点击任意位置继续
+
+        <div v-if="imageLoaded" class="victory-footer">
+          <div class="save-status" :class="saveStatusClass">
+            <template v-if="saveStatus === 'saving'">
+              <span class="save-spinner"></span>
+              <span>正在记录图鉴...</span>
+            </template>
+            <template v-else-if="saveStatus === 'success'">
+              <svg class="save-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              <span>已记录到图鉴</span>
+            </template>
+            <template v-else-if="saveStatus === 'error'">
+              <svg class="save-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              <span class="save-error-msg">{{ saveError }}</span>
+              <button class="retry-save-btn" @click.stop="retrySave">重试保存</button>
+            </template>
+          </div>
+          <div class="victory-hint" v-if="saveStatus !== 'error'">
+            点击任意位置继续
+          </div>
         </div>
       </div>
     </Transition>
@@ -30,14 +54,37 @@
 </template>
 
 <script setup>
+/**
+ * VictoryOverlay.vue — 胜利弹窗组件
+ *
+ * 【功能概述】
+ * 通关后显示全屏胜利图片覆盖层。
+ * 核心流程：
+ * 1. visible 变为 true → 随机选择一张胜利图片
+ * 2. 从后端 API 加载图片（失败时降级到本地文件）
+ * 3. 自动调用 saveUserCard() 将图片记入图鉴收集
+ * 4. 图片加载完成后可点击关闭，或等待 duration 毫秒自动关闭
+ *
+ * 【保存状态三态机制】
+ * - saving：蓝色旋转指示器，显示"正在记录图鉴..."
+ * - success：绿色勾，显示"已记录到图鉴"，自动关闭
+ * - error：红色警告 + 错误信息 + "重试保存"按钮，阻止自动关闭
+ *
+ * 【图片加载策略】
+ * - 优先从后端 API 获取（getApiImagePath）
+ * - 加载失败时降级到本地静态文件（getLocalImagePath）
+ * - 再次失败时显示 alert 提示
+ */
+
 import { ref, computed, watch, onUnmounted } from 'vue'
 import {
   VICTORY_IMAGES_DIR,
   VICTORY_IMAGES_COUNT,
   VICTORY_CONFIG,
-  VICTORY_API_BASE
+  IMAGE_API_BASE
 } from '../constants'
 import { saveUserCard, DEFAULT_USER_ID } from '../api/cardService'
+import { storage } from '../api/storageService'
 
 const props = defineProps({
   visible: {
@@ -73,8 +120,19 @@ const currentCardTypeId = ref(0)
 const imageLoaded = ref(false)
 const isDismissing = ref(false)
 const isFetching = ref(false)
+const useLocalFallback = ref(false)
 const lastShownIndex = ref(-1)
+const saveStatus = ref('idle')
+const saveError = ref('')
 let dismissTimer = null
+let saveRetryCount = 0
+const MAX_SAVE_RETRIES = 3
+
+const saveStatusClass = computed(() => ({
+  'save-status--saving': saveStatus.value === 'saving',
+  'save-status--success': saveStatus.value === 'success',
+  'save-status--error': saveStatus.value === 'error'
+}))
 
 const overlayStyle = computed(() => ({
   '--fade-in-duration': `${props.fadeInDuration}ms`,
@@ -87,6 +145,15 @@ const getLocalImagePath = (index) => {
   return `${VICTORY_IMAGES_DIR}/victory_${num}.png`
 }
 
+const getApiImagePath = (id, token) => {
+  const num = String(id).padStart(2, '0')
+  let url = `${IMAGE_API_BASE}/victory/${num}`
+  if (token) {
+    url += `?token=${encodeURIComponent(token)}`
+  }
+  return url
+}
+
 const pickRandomId = () => {
   if (VICTORY_IMAGES_COUNT <= 1) return 1
   let id
@@ -97,43 +164,11 @@ const pickRandomId = () => {
   return id
 }
 
-const extractImageUrl = (data) => {
-  if (!data) return null
-  if (typeof data === 'string') return data
-  return data.imageUrl || data.image_url || data.image || data.url || data.path || data.src || null
-}
-
-const API_TIMEOUT_MS = 5000
-let abortController = null
-
-const fetchImageFromApi = async (id) => {
-  abortController = new AbortController()
-  const timeoutId = setTimeout(() => abortController.abort(), API_TIMEOUT_MS)
-
+const getSessionToken = () => {
   try {
-    const response = await fetch(`${VICTORY_API_BASE}/${id}`, {
-      signal: abortController.signal,
-      headers: { 'Accept': 'application/json' }
-    })
-    if (!response.ok) {
-      throw new Error(`API responded with status ${response.status}`)
-    }
-    const data = await response.json()
-    const imageUrl = extractImageUrl(data)
-    if (!imageUrl) {
-      throw new Error('No image URL found in API response')
-    }
-    return imageUrl
-  } finally {
-    clearTimeout(timeoutId)
-    abortController = null
-  }
-}
-
-const cancelFetch = () => {
-  if (abortController) {
-    abortController.abort()
-    abortController = null
+    return storage.getItem('session_token') || null
+  } catch {
+    return null
   }
 }
 
@@ -142,8 +177,46 @@ const onImageLoad = () => {
 }
 
 const onImageError = () => {
+  if (!useLocalFallback.value && currentCardTypeId.value > 0) {
+    useLocalFallback.value = true
+    currentImage.value = getLocalImagePath(currentCardTypeId.value)
+    return
+  }
   imageLoaded.value = true
   alert('胜利图片加载失败，请检查网络连接')
+}
+
+/**
+ * 执行保存卡牌操作。
+ * 自动重试最多 MAX_SAVE_RETRIES 次，递增延迟。
+ */
+const performSave = async () => {
+  saveStatus.value = 'saving'
+  saveError.value = ''
+  saveRetryCount = 0
+
+  while (true) {
+    try {
+      await saveUserCard(DEFAULT_USER_ID, currentCardTypeId.value, 'game_drop')
+      saveStatus.value = 'success'
+      saveRetryCount = 0
+      return
+    } catch (err) {
+      saveRetryCount++
+      const msg = err instanceof Error ? err.message : String(err)
+      if (saveRetryCount >= MAX_SAVE_RETRIES) {
+        saveStatus.value = 'error'
+        saveError.value = msg || '保存失败，请检查网络连接'
+        return
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000 * saveRetryCount))
+    }
+  }
+}
+
+const retrySave = () => {
+  saveRetryCount = 0
+  performSave()
 }
 
 const clearTimer = () => {
@@ -156,6 +229,7 @@ const clearTimer = () => {
 const handleDismiss = () => {
   if (!props.clickToDismiss || isDismissing.value) return
   if (!imageLoaded.value) return
+  if (saveStatus.value === 'saving') return
   dismiss()
 }
 
@@ -169,33 +243,28 @@ const dismiss = () => {
   }, props.fadeOutDuration)
 }
 
-const showVictory = async () => {
+const showVictory = () => {
   isDismissing.value = false
   imageLoaded.value = false
+  useLocalFallback.value = false
   currentImage.value = ''
   isFetching.value = true
+  saveStatus.value = 'idle'
+  saveError.value = ''
 
   const id = pickRandomId()
   currentCardTypeId.value = id
+  const token = getSessionToken()
+  currentImage.value = getApiImagePath(id, token)
+  isFetching.value = false
 
-  try {
-    currentImage.value = await fetchImageFromApi(id)
-  } catch (err) {
-    console.warn(`API fetch failed for id ${id}:`, err.message)
-    currentImage.value = getLocalImagePath(id)
-  } finally {
-    isFetching.value = false
-  }
-
-  try {
-    await saveUserCard(DEFAULT_USER_ID, currentCardTypeId.value, 'game_drop')
-  } catch (err) {
-    console.warn('Failed to save victory card:', err.message)
-  }
+  performSave()
 
   clearTimer()
   dismissTimer = setTimeout(() => {
-    dismiss()
+    if (saveStatus.value !== 'error') {
+      dismiss()
+    }
   }, props.duration)
 }
 
@@ -203,16 +272,16 @@ watch(() => props.visible, (newVal) => {
   if (newVal) {
     showVictory()
   } else {
-    cancelFetch()
     clearTimer()
     isDismissing.value = false
     imageLoaded.value = false
     isFetching.value = false
+    saveStatus.value = 'idle'
+    saveError.value = ''
   }
 })
 
 onUnmounted(() => {
-  cancelFetch()
   clearTimer()
 })
 </script>
@@ -275,6 +344,96 @@ onUnmounted(() => {
 
 .victory-fade-enter-active {
   transition: opacity var(--fade-in-duration, 400ms) ease-out;
+}
+
+.victory-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  position: absolute;
+  bottom: 8vh;
+}
+
+.save-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  backdrop-filter: blur(8px);
+  transition: all 0.3s ease;
+}
+
+.save-status--saving {
+  background: rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  color: #93c5fd;
+}
+
+.save-status--success {
+  background: rgba(34, 197, 94, 0.2);
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  color: #86efac;
+}
+
+.save-status--error {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.save-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(147, 197, 253, 0.3);
+  border-top-color: #60a5fa;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.save-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.save-error-msg {
+  max-width: 260px;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.retry-save-btn {
+  padding: 6px 16px;
+  background: rgba(239, 68, 68, 0.3);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.retry-save-btn:hover {
+  background: rgba(239, 68, 68, 0.5);
+  color: #fecaca;
+  transform: scale(1.05);
+}
+
+.retry-save-btn:active {
+  transform: scale(0.95);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .victory-fade-leave-active {

@@ -1,3 +1,28 @@
+/**
+ * style.css — 全局样式与 Tailwind CSS 集成
+ *
+ * 【功能概述】
+ * 1. 引入 Tailwind CSS 基础层、组件层、工具类层
+ * 2. 定义 CSS 自定义属性（安全区域适配）
+ * 3. 全局重置样式（margin/padding/box-sizing）
+ * 4. 响应式字体大小（三段断点）
+ * 5. 横屏适配（landscape + max-height:500px）
+ * 6. 全局动画关键帧（popIn, fadeOut, bounceScore, shake）
+ *
+ * 【安全区域适配】
+ * 使用 CSS env() 函数读取设备安全区域（iOS 刘海屏/灵动岛），
+ * 通过 --safe-area-* 自定义属性传递给 #app 容器。
+ *
+ * 【字体栈】
+ * font-family: 'PingFang SC'（macOS/iOS）, 'Microsoft YaHei'（Windows）, system-ui 后备
+ *
+ * 【动画关键帧（全局复用）】
+ * - popIn:        弹入效果（0→120%→100% 缩放）
+ * - fadeOut:      淡出+放大（消消乐消除动画）
+ * - bounceScore:  弹跳（分数变化动画）
+ * - shake:        左右抖动（错误提示动画）
+ */
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

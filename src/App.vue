@@ -7,7 +7,8 @@
       @retry="handleRetry"
     />
     
-    <div v-else class="game-container w-full max-w-md landscape-adjust">      <div class="header-section relative flex items-center justify-center mb-3">
+    <div v-else class="game-container w-full max-w-md landscape-adjust">
+      <div class="header-section relative flex items-center justify-center mb-3">
         <button 
           @click="showLevelSelector = true"
           class="absolute left-0 level-select-btn flex items-center gap-1.5
@@ -48,6 +49,23 @@
         </button>
       </div>
 
+      <div
+        v-if="showDevReset"
+        class="env-bar flex items-center justify-between bg-yellow-400/20 backdrop-blur-sm border border-yellow-400/30 rounded-xl px-3 py-1.5 mb-2"
+      >
+        <span class="text-yellow-200 text-xs font-mono flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse inline-block"></span>
+          {{ storageEnv === 'test' ? '🧪 测试环境（刷新即重置）' : '🔧 开发环境' }}
+        </span>
+        <button
+          @click="handleResetAllData"
+          class="text-xs bg-red-500/70 hover:bg-red-500 text-white px-2.5 py-1 rounded-lg transition-all duration-150 hover:scale-105 active:scale-95"
+          title="清除所有存储数据"
+        >
+          重置数据
+        </button>
+      </div>
+
       <ScorePanel
         :score="score"
         :target="target"
@@ -68,7 +86,7 @@
       <div class="game-grid-row relative flex items-center justify-center" style="overflow: visible;">
         <div class="left-decor-wrapper hidden md:block absolute z-0" style="left: 0; top: 50%; transform: translate(calc(-100% - 2px), -50%); pointer-events: none;">
           <img
-            src="/decorations/decoration-left.png"
+            :src="decorationLeftSrc"
             alt="装饰"
             class="left-decor-img object-contain w-56 lg:w-64 xl:w-80 h-auto"
           />
@@ -85,7 +103,7 @@
         </div>
         <div class="right-decor-wrapper hidden md:block absolute z-0" style="right: 0; top: 50%; transform: translate(calc(100% + 2px), -50%); pointer-events: none;">
           <img
-            src="/decorations/decoration-left.png"
+            :src="decorationLeftSrc"
             alt="装饰"
             class="right-decor-img object-contain w-56 lg:w-64 xl:w-80 h-auto"
           />
@@ -124,6 +142,7 @@
         @reset-all="handleResetAllLevels"
       />
       <MyImages
+        ref="myImagesRef"
         :visible="showMyImages"
         @close="showMyImages = false"
       />
@@ -132,7 +151,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import ScorePanel from './components/ScorePanel.vue'
 import GameGrid from './components/GameGrid.vue'
 import Controls from './components/Controls.vue'
@@ -144,7 +163,9 @@ import VictoryOverlay from './components/VictoryOverlay.vue'
 import MessageBar from './components/MessageBar.vue'
 import MyImages from './components/MyImages.vue'
 import { useGameLogic } from './components/GameLogic'
-import { TOTAL_LEVELS, GRID_SIZE } from './constants'
+import { TOTAL_LEVELS, GRID_SIZE, STORAGE_KEYS } from './constants'
+import { storage } from './api/storageService'
+import { resetUserCards } from './api/cardService'
 
 const {
   grid,
@@ -173,27 +194,93 @@ const {
   handleGoToLevel,
   handleVictoryDismiss,
   showVictoryOverlay,
-  isLevelCompleted,
-  loadGameState,
   initializeGame,
-  saveHighScore
 } = useGameLogic()
 
 const cellSize = ref(40)
 const showLevelSelector = ref(false)
 const showMyImages = ref(false)
+const myImagesRef = ref(null)
 const totalLevels = TOTAL_LEVELS
+const decorationLeftSrc = computed(() => '/decorations/decoration-left.png')
 
+/**
+ * 【关卡持久化-手动重置入口】
+ *
+ * 这是整个应用中唯一能彻底清除关卡进度的函数。
+ * 被 LevelSelector 组件底部的"重新开始"按钮触发。
+ *
+ * 操作：
+ *   1. storage.removeItem(STORAGE_KEYS.COMPLETED_LEVELS) → 删除关卡记录
+ *   2. storage.removeItem(STORAGE_KEYS.GAME_STATE) → 删除当前游戏进度
+ *   3. completedLevels.value = []                              → 清空内存中的通关列表
+ *   4. handleRestart()                                         → 重置游戏回到第1关
+ *
+ * 注意：
+ *   - 此操作不可逆，一旦执行所有关卡进度永久丢失
+ *   - 仅清除关卡数据，不影响最高分（HIGH_SCORE key 未删除）
+ *   - 仅清除关卡数据，不影响 DDC 连胜记录（streakStorageKey 未删除）
+ */
 const handleResetAllLevels = () => {
-  localStorage.removeItem('happy-match-completed-levels')
-  localStorage.removeItem('happy-match-game-state')
+  storage.removeItem(STORAGE_KEYS.COMPLETED_LEVELS)
+  storage.removeItem(STORAGE_KEYS.GAME_STATE)
   completedLevels.value = []
   handleRestart()
   showLevelSelector.value = false
 }
 
+/**
+ * 【测试环境专用-完全重置】
+ *
+ * 生产环境：不执行（生产数据保护）
+ * 开发/测试环境：
+ *   1. 调用 resetUserCards() → 删除 MySQL 中所有用户卡牌记录
+ *   2. 调用 storage.resetAll() → 清除前端 localStorage/内存 Map
+ *   3. 清空内存关卡状态 → completedLevels.value = []
+ *   4. 重载 MyImages 图鉴 UI → myImagesRef.reload()
+ *   5. 重启游戏 → handleRestart()
+ *
+ * 这就是图鉴"重置"失效的根因修复：
+ *   之前仅清除了前端存储，从未删除后端 MySQL 中的 user_cards 数据。
+ *   导致 MyImages.loadData() 重新从后端拉取数据时，旧的收集记录依然存在。
+ *
+ * 触发方式：
+ *   - 页面顶部黄色"重置数据"按钮
+ */
+const handleResetAllData = async () => {
+  if (storage.isProduction()) {
+    console.warn('[App] Reset blocked in production')
+    return
+  }
+
+  try {
+    await resetUserCards()
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.warn('[App] Failed to reset user cards on server:', msg)
+  }
+
+  storage.resetAll()
+  completedLevels.value = []
+  showLevelSelector.value = false
+  messageType.value = 'info'
+
+  if (myImagesRef.value) {
+    myImagesRef.value.reload()
+  }
+
+  handleRestart()
+}
+
+const storageEnv = computed(() => storage.getEnv())
+const showDevReset = computed(() => storage.isDevOrTest())
+
 const handleRetry = async () => {
-  await initializeGame()
+  try {
+    await initializeGame()
+  } catch (err) {
+    console.error('[App] Retry initialization failed:', err)
+  }
 }
 
 const calculateCellSize = () => {
@@ -216,17 +303,26 @@ const calculateCellSize = () => {
   cellSize.value = newSize
 }
 
+const handleOrientationChange = () => {
+  setTimeout(calculateCellSize, 300)
+}
+
+/**
+ * 【环境感知-启动钩子】
+ *
+ * 测试模式（npm run dev:test）：内存存储，每次刷新自动清空，无需额外操作。
+ * 开发模式（npm run dev）：localStorage + dev_ 前缀，数据持久但隔离。
+ * 生产模式（npm run build:prod）：localStorage 原生键，数据永久保留。
+ */
 onMounted(() => {
   calculateCellSize()
   window.addEventListener('resize', calculateCellSize)
-  window.addEventListener('orientationchange', () => {
-    setTimeout(calculateCellSize, 300)
-  })
+  window.addEventListener('orientationchange', handleOrientationChange)
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', calculateCellSize)
-  window.removeEventListener('orientationchange', calculateCellSize)
+  window.removeEventListener('orientationchange', handleOrientationChange)
 })
 </script>
 

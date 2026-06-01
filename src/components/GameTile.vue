@@ -1,3 +1,126 @@
+<script setup>
+/**
+ * GameTile.vue — 单个游戏方块渲染组件
+ *
+ * 【功能概述】
+ * 渲染棋盘上的单个方块，支持以下视觉状态：
+ * - 普通方块（emoji 或自定义图片）
+ * - 选中高亮（金色光晕 + 放大）
+ * - 消除动画（matched/popping → fadeOut 动画）
+ * - 下落动画（falling + fallPhase start/end → CSS transition）
+ * - 拖动偏移（dragOffset → CSS transform translate）
+ * - 特殊方块（水平/垂直/炸弹 → 不同颜色光晕和箭头/炸弹图标）
+ * - 特殊方块激活（specialActivated → 闪光动画）
+ *
+ * 【Props】
+ * @prop {Object} tile       - 方块数据对象 {icon, selected, matched, falling, popping, special, ...}
+ * @prop {number} index      - 方块在 grid 数组中的索引
+ * @prop {number} cellSize   - 方块的像素尺寸
+ * @prop {boolean} isSelected - 是否为当前选中方块
+ * @prop {boolean} isDragging - 是否正在拖动中
+ * @prop {{x:number, y:number}} dragOffset - 拖动偏移量（像素）
+ *
+ * 【事件】
+ * @event click - 方块被点击，参数 index
+ *
+ * 【使用示例】
+ *   <GameTile :tile="grid[i]" :index="i" :cell-size="40" :drag-offset="getTileOffset(i)" @click="handleClick" />
+ */
+
+import { computed } from 'vue'
+
+const props = defineProps({
+  tile: Object,
+  index: Number,
+  cellSize: Number,
+  isSelected: Boolean,
+  isDragging: {
+    type: Boolean,
+    default: false
+  },
+  dragOffset: {
+    type: Object,
+    default: () => ({ x: 0, y: 0 })
+  }
+})
+
+const emit = defineEmits(['click'])
+
+/**
+ * 判断是否为自定义图片图标（以 / 开头的路径）
+ */
+const isCustomIcon = computed(() => {
+  return props.tile.icon && props.tile.icon.startsWith('/')
+})
+
+/**
+ * 判断是否有拖动偏移（非零）
+ */
+const hasDragOffset = computed(() => {
+  return props.dragOffset.x !== 0 || props.dragOffset.y !== 0
+})
+
+/**
+ * 动态计算方块样式
+ *
+ * 处理三种视觉模式：
+ * 1. 拖动模式：translate 偏移 + 阴影增强 + z-index 提升
+ * 2. 下落模式：fallPhase start（瞬间到上方）→ end（CSS transition 下落）
+ * 3. 默认模式：基础尺寸 + 标准 transition
+ *
+ * @returns {Object} CSS 样式对象
+ */
+const tileStyle = computed(() => {
+  const size = props.cellSize
+  const { x, y } = props.dragOffset
+
+  const style = {
+    width: `${size}px`,
+    height: `${size}px`,
+    fontSize: `${size * 0.6}px`
+  }
+
+  if (x !== 0 || y !== 0) {
+    style.transform = `translate(${x}px, ${y}px)`
+    style.transition = 'transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1)'
+    style.zIndex = 10
+    style.boxShadow = '0 8px 25px rgba(0,0,0,0.3)'
+    style.borderRadius = '16px'
+    return style
+  }
+
+  if (props.tile.falling && (props.tile.fallDistance || 0) > 0) {
+    const gap = 6
+    const offsetY = -(props.tile.fallDistance) * (size + gap)
+
+    if (props.tile.fallPhase === 'start') {
+      style.transform = `translateY(${offsetY}px)`
+      style.transition = 'none'
+      style.zIndex = 5
+    } else if (props.tile.fallPhase === 'end') {
+      style.transform = 'translateY(0)'
+      style.transition = `transform ${0.15 + props.tile.fallDistance * 0.05}s cubic-bezier(0.25, 0.46, 0.45, 0.94)`
+      style.zIndex = 5
+    } else {
+      style.transform = `translateY(${offsetY}px)`
+      style.transition = 'none'
+    }
+    return style
+  }
+
+  style.transition = 'transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)'
+  return style
+})
+
+const handleClick = () => {
+  emit('click', props.index)
+}
+
+const handleTouchStart = (e) => {
+  e.preventDefault()
+}
+</script>
+
 <template>
   <div
       class="game-tile relative flex items-center justify-center cursor-pointer select-none overflow-hidden"
@@ -48,87 +171,6 @@
     </div>
   </div>
 </template>
-
-<script setup>
-import { computed } from 'vue'
-import { DEFAULT_EMOJIS } from '../constants'
-
-const props = defineProps({
-  tile: Object,
-  index: Number,
-  cellSize: Number,
-  isSelected: Boolean,
-  isDragging: {
-    type: Boolean,
-    default: false
-  },
-  dragOffset: {
-    type: Object,
-    default: () => ({ x: 0, y: 0 })
-  }
-})
-
-const emit = defineEmits(['click'])
-
-const isCustomIcon = computed(() => {
-  return props.tile.icon && props.tile.icon.startsWith('/')
-})
-
-const hasDragOffset = computed(() => {
-  return props.dragOffset.x !== 0 || props.dragOffset.y !== 0
-})
-
-const tileStyle = computed(() => {
-  const size = props.cellSize
-  const { x, y } = props.dragOffset
-
-  const style = {
-    width: `${size}px`,
-    height: `${size}px`,
-    fontSize: `${size * 0.6}px`
-  }
-
-  if (x !== 0 || y !== 0) {
-    style.transform = `translate(${x}px, ${y}px)`
-    style.transition = 'transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1)'
-    style.zIndex = 10
-    style.boxShadow = '0 8px 25px rgba(0,0,0,0.3)'
-    style.borderRadius = '16px'
-    return style
-  }
-
-  if (props.tile.falling && (props.tile.fallDistance || 0) > 0) {
-    const gap = 6
-    const offsetY = -(props.tile.fallDistance) * (size + gap)
-
-    if (props.tile.fallPhase === 'start') {
-      style.transform = `translateY(${offsetY}px)`
-      style.transition = 'none'
-      style.zIndex = 5
-    } else if (props.tile.fallPhase === 'end') {
-      style.transform = 'translateY(0)'
-      style.transition = `transform ${0.15 + props.tile.fallDistance * 0.05}s cubic-bezier(0.25, 0.46, 0.45, 0.94)`
-      style.zIndex = 5
-    } else {
-      style.transform = `translateY(${offsetY}px)`
-      style.transition = 'none'
-    }
-    return style
-  }
-
-  style.transition = 'transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)'
-  return style
-})
-
-const handleClick = () => {
-  emit('click', props.index)
-}
-
-const handleTouchStart = (e) => {
-  // 阻止默认行为，但不阻止事件冒泡
-  e.preventDefault()
-}
-</script>
 
 <style scoped>
 .game-tile {
@@ -333,77 +375,5 @@ const handleTouchStart = (e) => {
     box-shadow: 0 0 32px rgba(255, 60, 30, 1), 0 0 56px rgba(255, 120, 30, 0.6);
     transform: scale(1.06);
   }
-}
-
-@keyframes arrowPulseHorizontal {
-  0%, 100% {
-    transform: translateX(0);
-    opacity: 0.8;
-  }
-  50% {
-    transform: translateX(3px);
-    opacity: 1;
-  }
-}
-
-@keyframes arrowPulseVertical {
-  0%, 100% {
-    transform: translateY(0);
-    opacity: 0.8;
-  }
-  50% {
-    transform: translateY(3px);
-    opacity: 1;
-  }
-}
-
-@keyframes bombShake {
-  0%, 100% {
-    transform: rotate(0deg) scale(1);
-  }
-  25% {
-    transform: rotate(3deg) scale(1.08);
-  }
-  75% {
-    transform: rotate(-3deg) scale(1.08);
-  }
-}
-
-@keyframes specialActivateFlash {
-  0% {
-    transform: scale(1);
-    filter: brightness(1);
-  }
-  30% {
-    transform: scale(1.25);
-    filter: brightness(1.8);
-  }
-  100% {
-    transform: scale(1);
-    filter: brightness(1);
-  }
-}
-
-@keyframes flashSpin {
-  0% {
-    transform: scale(0) rotate(0deg);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(2.5) rotate(180deg);
-    opacity: 0;
-  }
-}
-
-.tile-emoji {
-  user-select: none;
-  pointer-events: none;
-  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.2));
-}
-
-.tile-image {
-  user-select: none;
-  pointer-events: none;
-  border-radius: 0;
 }
 </style>
