@@ -90,7 +90,7 @@ const tileStyle = computed(() => {
   }
 
   if (props.tile.falling && (props.tile.fallDistance || 0) > 0) {
-    const gap = 6
+    const gap = 3
     const offsetY = -(props.tile.fallDistance) * (size + gap)
 
     if (props.tile.fallPhase === 'start') {

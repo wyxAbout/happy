@@ -55,23 +55,39 @@ const lastSwapTime = ref(0)
 const pointerStartIndex = ref(null)
 
 /**
+ * 统一间距常量，保证 gridStyle / containerStyle / 触摸坐标计算一致
+ */
+const GAP = 3
+const PADDING = 9
+
+/**
  * 网格容器样式（CSS Grid）
- * 列数 = GRID_SIZE，间距 = 6px
+ * 列数 = GRID_SIZE，间距 = 3px；place-content: center 实现砖块居中
  */
 const containerStyle = computed(() => ({
   display: 'grid',
   gridTemplateColumns: `repeat(${GRID_SIZE}, ${props.cellSize}px)`,
   gridTemplateRows: `repeat(${GRID_SIZE}, ${props.cellSize}px)`,
-  gap: '6px',
-  justifyContent: 'start'
+  gap: `${GAP}px`,
+  placeContent: 'center'
 }))
 
 /**
- * 网格整体高度 = cellSize × GRID_SIZE + 间距 × (GRID_SIZE-1) + 内边距
+ * 网格整体样式（根据 cellSize 动态计算，自适应不同屏幕）
+ * 总尺寸 = cellSize×GRID_SIZE + gap×(GRID_SIZE-1) + padding×2
+ * 留白 ≈(padding+gap区域) / 总面积 ≈ 15%
  */
-const gridStyle = computed(() => ({
-  height: `${props.cellSize * GRID_SIZE + 6 * (GRID_SIZE - 1) + 32}px`
-}))
+const gridStyle = computed(() => {
+  const size = props.cellSize
+  const innerWidth = size * GRID_SIZE + GAP * (GRID_SIZE - 1)
+  const totalSize = innerWidth + PADDING * 2
+  return {
+    width: `${totalSize}px`,
+    height: `${totalSize}px`,
+    padding: `${PADDING}px`,
+    margin: '10px auto'
+  }
+})
 
 /**
  * 使用 useTileDrag 管理拖拽状态
@@ -104,8 +120,8 @@ const handleTileClick = (index) => {
 const getCellIndexFromClientPoint = (clientX, clientY) => {
   const rect = gridRef.value.getBoundingClientRect()
   const styles = getComputedStyle(gridRef.value)
-  const padding = parseFloat(styles.paddingLeft) || 12
-  const gap = 6
+  const padding = parseFloat(styles.paddingLeft) || PADDING
+  const gap = GAP
   const cellTotal = props.cellSize + gap
 
   const relX = clientX - rect.left - padding
@@ -219,7 +235,7 @@ useSwipeGestureEnhanced(gridRef, {
 <template>
   <div
     ref="gridRef"
-    class="game-grid bg-gradient-to-br from-gray-100 to-gray-200 p-4 rounded-2xl shadow-inner mt-4 select-none"
+    class="game-grid bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl shadow-inner select-none"
     :class="{ 'game-grid--dragging': dragState.active }"
     :style="gridStyle"
     @touchstart.prevent="handlePointerStart"
@@ -251,6 +267,18 @@ useSwipeGestureEnhanced(gridRef, {
   -webkit-user-select: none;
   overflow: hidden;
   cursor: pointer;
+  /* 移动端白底容器居中对齐 + 自适应宽度 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 移动端：白底容器不超过屏幕宽度，自动留8~12px边距 */
+@media (max-width: 500px) {
+  .game-grid {
+    max-width: calc(100vw - 20px);
+    max-height: calc(100vw - 20px);
+  }
 }
 
 .game-grid--dragging {
@@ -274,7 +302,5 @@ useSwipeGestureEnhanced(gridRef, {
 
 .grid-container {
   position: relative;
-  width: 100%;
-  max-width: 100%;
 }
 </style>

@@ -74,7 +74,7 @@
             class="left-decor-img object-contain w-56 lg:w-64 xl:w-80 h-auto"
           />
         </div>
-        <div class="relative z-10">
+        <div class="relative z-10" style="padding: 5px 6px;">
           <GameGrid
             :grid="grid"
             :cell-size="cellSize"
@@ -271,10 +271,10 @@ const calculateCellSize = () => {
   const screenHeight = window.innerHeight
   const isLandscape = screenWidth > screenHeight
 
-  const outerPadding = isLandscape ? 56 : 32
-  const gridPadding = 32
-  const gap = 6
-  const maxContainerWidth = isLandscape ? 420 : 448
+  const outerPadding = isLandscape ? 56 : 20  // 移动端预留10px×2边距
+  const gridPadding = 18                       // 9px内边距 × 2
+  const gap = 3                                // 砖块间距 3px
+  const maxContainerWidth = 449                // 网格固定宽度
 
   const containerWidth = Math.min(screenWidth - outerPadding, maxContainerWidth)
   const gridContentWidth = containerWidth - gridPadding
@@ -282,7 +282,7 @@ const calculateCellSize = () => {
   const availableForCells = gridContentWidth - totalGapWidth
 
   let newSize = Math.floor(availableForCells / GRID_SIZE)
-  newSize = Math.max(32, Math.min(52, newSize))
+  newSize = Math.max(32, Math.min(62, newSize))
   cellSize.value = newSize
 }
 
@@ -337,6 +337,13 @@ onUnmounted(() => {
 
   .game-container {
     transform: translateY(-2vh);
+  }
+}
+
+/* 移动端：容器与屏幕边缘保持10px间距 */
+@media (max-width: 767px) {
+  .app {
+    padding: 10px;
   }
 }
 

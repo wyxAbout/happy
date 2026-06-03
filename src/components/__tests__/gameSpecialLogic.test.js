@@ -202,8 +202,9 @@ describe('gameSpecialLogic 防刷分机制', () => {
       collectSpecialArea(result, 0, 'bomb')
       expect(result.size).toBe(4)
       expect(result.has(0)).toBe(true)
+      expect(result.has(1)).toBe(true)
+      expect(result.has(7)).toBe(true)
       expect(result.has(8)).toBe(true)
-      expect(result.has(9)).toBe(true)
     })
 
     it('bomb 在棋盘中心应收集 9 格', () => {
