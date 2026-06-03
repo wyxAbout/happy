@@ -49,23 +49,6 @@
         </button>
       </div>
 
-      <div
-        v-if="showDevReset"
-        class="env-bar flex items-center justify-between bg-yellow-400/20 backdrop-blur-sm border border-yellow-400/30 rounded-xl px-3 py-1.5 mb-2"
-      >
-        <span class="text-yellow-200 text-xs font-mono flex items-center gap-1.5">
-          <span class="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse inline-block"></span>
-          {{ storageEnv === 'test' ? '🧪 测试环境（刷新即重置）' : '🔧 开发环境' }}
-        </span>
-        <button
-          @click="handleResetAllData"
-          class="text-xs bg-red-500/70 hover:bg-red-500 text-white px-2.5 py-1 rounded-lg transition-all duration-150 hover:scale-105 active:scale-95"
-          title="清除所有存储数据"
-        >
-          重置数据
-        </button>
-      </div>
-
       <ScorePanel
         :score="score"
         :target="target"
@@ -311,8 +294,8 @@ const handleOrientationChange = () => {
  * 【环境感知-启动钩子】
  *
  * 测试模式（npm run dev:test）：内存存储，每次刷新自动清空，无需额外操作。
- * 开发模式（npm run dev）：localStorage + dev_ 前缀，数据持久但隔离。
- * 生产模式（npm run build:prod）：localStorage 原生键，数据永久保留。
+ * 生产模式（npm run dev）：localStorage 原生键，数据永久保留。
+ * 生产构建（npm run build:prod）：localStorage 原生键，数据永久保留。
  */
 onMounted(() => {
   calculateCellSize()

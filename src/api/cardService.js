@@ -20,7 +20,7 @@
  * 默认 8 秒超时，通过 AbortController 实现。
  */
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5022'
+const API_BASE = import.meta.env.VITE_API_BASE !== undefined ? import.meta.env.VITE_API_BASE : 'http://localhost:5022'
 const API_TIMEOUT_MS = 8000
 const API_KEY = import.meta.env.VITE_API_KEY || 'dev-secret-key-change-in-production'
 

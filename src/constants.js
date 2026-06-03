@@ -50,13 +50,13 @@ export const DEFAULT_EMOJIS = ['🍎', '🍊', '🍋', '🍇', '🍓', '🍒']
 export const ICONS_DIR = '/custom-icons'
 
 /** 图片 API 基地址 */
-export const IMAGE_API_BASE = (import.meta.env.VITE_API_BASE || 'http://localhost:5022') + '/api/images'
+export const IMAGE_API_BASE = (import.meta.env.VITE_API_BASE !== undefined ? import.meta.env.VITE_API_BASE : 'http://localhost:5022') + '/api/images'
 /** 胜利图片目录 */
 export const VICTORY_IMAGES_DIR = '/victory_images'
 /** 胜利图片总数（= 卡牌类型数） */
 export const VICTORY_IMAGES_COUNT = 24
 /** 卡牌类型 API 基地址 */
-export const VICTORY_API_BASE = (import.meta.env.VITE_API_BASE || 'http://localhost:5022') + '/api/card-types'
+export const VICTORY_API_BASE = (import.meta.env.VITE_API_BASE !== undefined ? import.meta.env.VITE_API_BASE : 'http://localhost:5022') + '/api/card-types'
 
 /** 胜利动画配置 */
 export const VICTORY_CONFIG = {
