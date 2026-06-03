@@ -87,8 +87,8 @@ describe('gameSpecialLogic 防刷分机制', () => {
       await processSpecialClear(0, 'horizontal')
       await processSpecialClear(8, 'horizontal')
 
-      // 第1次: 8×10×2×1.0 = 160, 第2次: 8×10×2×0.75 = 120, total = 280
-      expect(ctx.score.value).toBe(280)
+      // 第1次: 7×10×2×1.0 = 140, 第2次: 7×10×2×0.75 = 105, total = 245
+      expect(ctx.score.value).toBe(245)
       expect(ctx.specialChainCount.value).toBe(2)
       expect(ctx.message.value.includes('连续特殊×2')).toBe(true)
       expect(ctx.message.value.includes('得分×75%')).toBe(true)
@@ -104,8 +104,8 @@ describe('gameSpecialLogic 防刷分机制', () => {
       await processSpecialClear(8, 'horizontal')
       await processSpecialClear(16, 'horizontal')
 
-      // 160 + 120 + 80 = 360
-      expect(ctx.score.value).toBe(360)
+      // 140 + 105 + 70 = 315
+      expect(ctx.score.value).toBe(315)
       expect(ctx.specialChainCount.value).toBe(3)
       expect(ctx.message.value.includes('得分×50%')).toBe(true)
     })
@@ -121,8 +121,8 @@ describe('gameSpecialLogic 防刷分机制', () => {
       await processSpecialClear(16, 'horizontal')
       await processSpecialClear(24, 'horizontal')
 
-      // 160 + 120 + 80 + 40 = 400
-      expect(ctx.score.value).toBe(400)
+      // 140 + 105 + 70 + 35 = 350
+      expect(ctx.score.value).toBe(350)
       expect(ctx.specialChainCount.value).toBe(4)
       expect(ctx.message.value.includes('得分×25%')).toBe(true)
     })
@@ -139,8 +139,8 @@ describe('gameSpecialLogic 防刷分机制', () => {
       await processSpecialClear(24, 'horizontal')
       await processSpecialClear(32, 'horizontal')
 
-      // 160 + 120 + 80 + 40 + 40 = 440
-      expect(ctx.score.value).toBe(440)
+      // 140 + 105 + 70 + 35 + 35 = 385
+      expect(ctx.score.value).toBe(385)
       expect(ctx.specialChainCount.value).toBe(5)
     })
   })
@@ -150,14 +150,14 @@ describe('gameSpecialLogic 防刷分机制', () => {
       const ctx = createTestCtx()
       const { processDoubleSpecialClear } = createSpecialClear(ctx)
 
-      // 一行的8个 + 一列的8个（重叠1个）= 15个
-      // 15 × 10 × 2 × 1.5 × 1.0 = 450
+      // row(7) + col(7) - overlap(1) = 13 cells
+      // 13 × 10 × 2 × 1.5 × 1.0 = 390
       await processDoubleSpecialClear(0, 9, 'horizontal', 'vertical')
 
       expect(ctx.specialChainCount.value).toBe(1)
-      // 验证分数在一个合理范围内（15或16个非空）
-      expect(ctx.score.value).toBeGreaterThanOrEqual(450)
-      expect(ctx.score.value).toBeLessThanOrEqual(480)
+      // 验证分数在一个合理范围内（13个非空）
+      expect(ctx.score.value).toBeGreaterThanOrEqual(390)
+      expect(ctx.score.value).toBeLessThanOrEqual(420)
     })
 
     it('chain=2 双重消除应得 75% 得分', async () => {
@@ -173,25 +173,25 @@ describe('gameSpecialLogic 防刷分机制', () => {
   })
 
   describe('collectSpecialArea 范围正确性', () => {
-    it('horizontal 应收集整行 8 格', () => {
+    it('horizontal 应收集整行 7 格', () => {
       const ctx = createTestCtx()
       const { collectSpecialArea } = createSpecialClear(ctx)
       const result = new Set()
       collectSpecialArea(result, 5, 'horizontal')
-      expect(result.size).toBe(8)
-      for (let c = 0; c < 8; c++) {
+      expect(result.size).toBe(7)
+      for (let c = 0; c < 7; c++) {
         expect(result.has(c)).toBe(true)
       }
     })
 
-    it('vertical 应收集整列 8 格', () => {
+    it('vertical 应收集整列 7 格', () => {
       const ctx = createTestCtx()
       const { collectSpecialArea } = createSpecialClear(ctx)
       const result = new Set()
       collectSpecialArea(result, 3, 'vertical')
-      expect(result.size).toBe(8)
-      for (let r = 0; r < 8; r++) {
-        expect(result.has(r * 8 + 3)).toBe(true)
+      expect(result.size).toBe(7)
+      for (let r = 0; r < 7; r++) {
+        expect(result.has(r * 7 + 3)).toBe(true)
       }
     })
 
@@ -210,7 +210,7 @@ describe('gameSpecialLogic 防刷分机制', () => {
       const ctx = createTestCtx()
       const { collectSpecialArea } = createSpecialClear(ctx)
       const result = new Set()
-      collectSpecialArea(result, 28, 'bomb')
+      collectSpecialArea(result, 24, 'bomb')
       expect(result.size).toBe(9)
     })
   })
