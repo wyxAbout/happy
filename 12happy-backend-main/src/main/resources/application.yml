@@ -1,0 +1,51 @@
+server:
+  port: ${SERVER_PORT:5022}
+
+app:
+  images:
+    base-path: ${APP_IMAGES_BASE_PATH:../public}
+  api-key: ${APP_API_KEY:dev-secret-key-change-in-production}
+
+# ===== Shimmer Shop OpenAPI 对接配置 =====
+shimmer:
+  openapi:
+    base-url: ${OPENAPI_BASE_URL:https://go.neusoft.edu.cn}
+    app-id: ${OPENAPI_APP_ID:oak_4gm8xhh818ev}
+    api-key: ${OPENAPI_API_KEY:oak_yLmDbUKk6C0Sq-Y9WsCrg1XqIFQWECvmi8vekXNboTA}
+    server-name: ${OPENAPI_SERVER_NAME:go.neusoft.edu.cn}
+    timeout-ms: ${OPENAPI_TIMEOUT_MS:3000}
+  app:
+    # 本后端对外可访问地址（用于构造 SSO callback URL，Shimmer 会回跳到这个地址）
+    base-url: ${APP_BASE_URL:http://localhost:5022}
+    # 前端回跳地址白名单，支持相对路径、精确 URL 和 *.domain.com 通配
+    redirect-whitelist: ${APP_REDIRECT_WHITELIST:http://localhost:5173,http://localhost:8080,http://127.0.0.1:5173,http://127.0.0.1:8080}
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL:jdbc:mysql://localhost:3306/12happy?useUnicode=true&characterEncoding=utf8&allowMultiQueries=false&serverTimezone=GMT%2b8&allowPublicKeyRetrieval=true}
+    username: ${DB_USERNAME:root}
+    password: Gqq745408.
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+mybatis:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+---
+spring:
+  config:
+    activate:
+      on-profile: production
+mybatis:
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl

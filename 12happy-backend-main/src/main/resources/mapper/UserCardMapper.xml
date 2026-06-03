@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.qingquan.mapper.UserCardMapper">
+
+    <resultMap id="userCardMap" type="com.qingquan.entity.UserCard">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="cardTypeId" column="card_type_id"/>
+        <result property="source" column="source"/>
+        <result property="obtainedTime" column="obtained_time"/>
+    </resultMap>
+
+    <select id="selectAll" resultMap="userCardMap">
+        SELECT * FROM user_cards
+        <where>
+            <if test="userId != null">user_id = #{userId}</if>
+        </where>
+        ORDER BY obtained_time DESC
+    </select>
+
+    <select id="selectById" resultMap="userCardMap">
+        SELECT * FROM user_cards WHERE id = #{id}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO user_cards (user_id, card_type_id, source)
+        VALUES (#{userId}, #{cardTypeId}, #{source})
+    </insert>
+
+    <update id="update">
+        UPDATE user_cards
+        <set>
+            <if test="userId != null">user_id = #{userId},</if>
+            <if test="cardTypeId != null">card_type_id = #{cardTypeId},</if>
+            <if test="source != null">source = #{source},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM user_cards WHERE id = #{id}
+    </delete>
+
+    <!-- ==================== 兑换 + 重置相关 SQL（新增） ==================== -->
+
+    <!-- 删除指定用户的所有卡牌（图鉴重置用） -->
+    <delete id="deleteByUserId">
+        DELETE FROM user_cards WHERE user_id = #{userId}
+    </delete>
+
+    <!--
+        按用户+卡牌类型查询前N条记录（兑换时取4张来源卡牌）。
+        按 obtained_time DESC 排序 → 消耗最早获得的卡牌。
+    -->
+    <select id="selectByUserIdAndCardTypeId" resultMap="userCardMap">
+        SELECT * FROM user_cards
+        WHERE user_id = #{userId} AND card_type_id = #{cardTypeId}
+        ORDER BY obtained_time ASC
+        LIMIT #{limit}
+    </select>
+
+    <!-- 批量删除（兑换时一次性删除4张来源卡牌） -->
+    <delete id="deleteByIds">
+        DELETE FROM user_cards WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+</mapper>
