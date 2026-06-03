@@ -17,7 +17,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createSpecialClear } from '../gameSpecialLogic'
 
-const GRID_SIZE = 8
+const GRID_SIZE = 7
 
 function createMockGrid(iconMap = {}) {
   const grid = []
@@ -70,10 +70,10 @@ describe('gameSpecialLogic 防刷分机制', () => {
       const ctx = createTestCtx()
       const { processSpecialClear } = createSpecialClear(ctx)
 
-      // 整行8格全部有图标 → 8 × 10 × 2 = 160
+      // 整行7格全部有图标 → 7 × 10 × 2 = 140
       await processSpecialClear(0, 'horizontal')
 
-      expect(ctx.score.value).toBe(160)
+      expect(ctx.score.value).toBe(140)
       expect(ctx.specialChainCount.value).toBe(1)
       expect(ctx.message.value.includes('[连续特殊')).toBe(false)
     })

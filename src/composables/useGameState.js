@@ -350,7 +350,12 @@ export function useGameState() {
             matches.add(matchIdx)
             horizontalMatchTiles.add(matchIdx)
           }
-          if (matchCount >= 4) {
+          if (matchCount >= 5) {
+            specialCandidates.push({
+              index: index + Math.floor(matchCount / 2),
+              direction: 'bomb'
+            })
+          } else if (matchCount >= 4) {
             specialCandidates.push({
               index: index + Math.floor(matchCount / 2),
               direction: 'horizontal'
@@ -378,7 +383,12 @@ export function useGameState() {
             matches.add(matchIdx)
             verticalMatchTiles.add(matchIdx)
           }
-          if (matchCount >= 4) {
+          if (matchCount >= 5) {
+            specialCandidates.push({
+              index: index + Math.floor(matchCount / 2) * GRID_SIZE,
+              direction: 'bomb'
+            })
+          } else if (matchCount >= 4) {
             specialCandidates.push({
               index: index + Math.floor(matchCount / 2) * GRID_SIZE,
               direction: 'vertical'

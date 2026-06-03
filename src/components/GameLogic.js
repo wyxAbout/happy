@@ -182,14 +182,19 @@ export function useGameLogic() {
         }
       })
 
+      // 本轮新晋特殊候选的索引集合（≥4连消产生），这些保留不消除
+      const newSpecialSet = new Set(specialCandidates.map(c => c.index))
+
       matches.forEach(index => {
-        if (!grid.value[index].special) {
+        if (!newSpecialSet.has(index)) {
+          // 普通砖块 + 已存在的特殊砖块（本轮非新晋）→ 一起消除
           grid.value[index].icon = ''
           grid.value[index].matched = false
           grid.value[index].popping = false
           grid.value[index].special = null
           grid.value[index].specialActivated = false
         } else {
+          // 本轮新晋特殊候选 → 保留为特殊砖块
           grid.value[index].matched = false
           grid.value[index].popping = false
         }

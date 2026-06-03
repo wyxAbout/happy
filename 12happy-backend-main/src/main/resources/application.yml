@@ -1,0 +1,37 @@
+server:
+  port: ${SERVER_PORT:5022}
+
+app:
+  images:
+    base-path: ${APP_IMAGES_BASE_PATH:../public}
+  api-key: ${APP_API_KEY:dev-secret-key-change-in-production}
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL:jdbc:mysql://localhost:3306/12happy?useUnicode=true&characterEncoding=utf8&allowMultiQueries=false&serverTimezone=GMT%2b8&allowPublicKeyRetrieval=true}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:060425}
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+mybatis:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+---
+spring:
+  config:
+    activate:
+      on-profile: production
+mybatis:
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl

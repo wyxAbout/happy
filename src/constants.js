@@ -3,7 +3,7 @@
  *
  * <h3>游戏核心参数</h3>
  * <table>
- *   <tr><td>GRID_SIZE = 8</td><td>棋盘 8×8 = 64 格</td></tr>
+ *   <tr><td>GRID_SIZE = 7</td><td>棋盘 7×7 = 49 格</td></tr>
  *   <tr><td>TILE_TYPES = 6</td><td>默认 6 种砖块类型</td></tr>
  *   <tr><td>MIN_MATCH = 3</td><td>最低消除数量</td></tr>
  *   <tr><td>BASE_SCORE = 10</td><td>单次消除基础分</td></tr>
@@ -24,8 +24,8 @@
 
 export const MOBILE_BREAKPOINT = 768
 
-/** 棋盘大小：8×8 */
-export const GRID_SIZE = 8
+/** 棋盘大小：7×7 */
+export const GRID_SIZE = 7
 /** 默认砖块种类数（自定义图标可替换） */
 export const TILE_TYPES = 6
 /** 最低消除数 */
